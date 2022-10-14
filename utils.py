@@ -4,6 +4,7 @@ import random
 import torch
 import os
 from pycocotools.coco import COCO
+import torchvision.transforms as T
 
 imageSize = [800,600]
 coco = COCO(os.path.join('/home/rogdenis/segmentation/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
@@ -30,7 +31,6 @@ def loadData(trainDir, onlycats=False, cats=None, augmentation=False):
         for ann_id in ann_ids:
             ann = coco.loadAnns(ann_id)
             mask = coco.annToMask(ann[0])
-            #print(file_name, mask.shape)
             #mask=cv2.resize(mask,imageSize,cv2.INTER_NEAREST)
             masks.append(mask)
             labels.append(cats[ann[0]['category_id']])
@@ -44,31 +44,30 @@ def loadData(trainDir, onlycats=False, cats=None, augmentation=False):
             boxes[i] = torch.tensor([x, y, x+w, y+h])
         masks = torch.as_tensor(masks, dtype=torch.uint8)
         img = torch.as_tensor(img, dtype=torch.float32)
-        #print(img.shape)
-        data = {}
-        data["boxes"] =  boxes
-        data["labels"] = torch.tensor(labels, dtype=torch.int64)#torch.ones((num_objs,), dtype=torch.int64)   # there is only one class
-        data["masks"] = masks
-        dataset.append((img, data))
+        imgs=[img]
+        if augmentation:
+            #imgs += [T.GaussianBlur(kernel_size=(51, 91), sigma=sigma)(img) for sigma in range(2,10)]
+            imgs += [T.RandomRotation(degrees=d)(img) for d in range(0,5)]
+        for img in imgs:
+            #print(img.shape)
+            data = {}
+            data["boxes"] =  boxes
+            data["labels"] = torch.tensor(labels, dtype=torch.int64)#torch.ones((num_objs,), dtype=torch.int64)   # there is only one class
+            data["masks"] = masks
+            dataset.append((img, data))
     return dataset, cats
 
-def make_batches(dataset, batchSize):
+def make_batch(dataset, batchSize, start):
     #print(dataset[0][1])
-    batches = []
-    i = 0
-    while i < len(dataset):
-        if len(dataset) - i < batchSize:
-            break
-        batch_Imgs = []
-        batch_Data = []
-        while len(batch_Imgs) < batchSize:
-            batch_Imgs.append(dataset[i][0])
-            batch_Data.append(dataset[i][1])
-            i += 1
-        batch_Imgs = torch.stack([torch.as_tensor(d) for d in batch_Imgs], 0)
-        batch_Imgs = batch_Imgs.swapaxes(1, 3).swapaxes(2, 3)
-        batches.append((batch_Imgs,batch_Data))
-    return batches
+    batch_Imgs = []
+    batch_Data = []
+    while len(batch_Imgs) < batchSize:
+        batch_Imgs.append(dataset[start][0])
+        batch_Data.append(dataset[start][1])
+        start += 1
+    batch_Imgs = torch.stack([torch.as_tensor(d) for d in batch_Imgs], 0)
+    batch_Imgs = batch_Imgs.swapaxes(1, 3).swapaxes(2, 3)
+    return batch_Imgs, batch_Data, start
 
 
 def get_outputs(image, model, threshold):
