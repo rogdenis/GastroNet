@@ -9,10 +9,19 @@ import torchvision.transforms as T
 imageSize = [800,600]
 coco = COCO(os.path.join('/home/rogdenis/segmentation/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
 coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
+coco_names.insert(0,"bg")
 
 # this will help us create a different color for each class
 COLORS = np.random.uniform(0, 255, size=(len(coco_names), 3))
 
+
+def make_coco(trainDir):
+    coco = COCO(os.path.join(trainDir,'_annotations.coco.json'))
+    imgIds = coco.getImgIds()
+    random.shuffle(imgIds)
+    cats = {v: k for k, v in dict(enumerate(coco.getCatIds())).items()}
+    return(coco, imgIds, cats)
+    
 def loadData(trainDir, onlycats=False, cats=None, augmentation=False):
     coco = COCO(os.path.join(trainDir,'_annotations.coco.json'))
     imgIds = coco.getImgIds()
@@ -117,7 +126,8 @@ def draw_segmentation_map(image, masks, boxes, labels):
         image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
                       thickness=2)
         # put the label text above the objects
-        image = cv2.putText(image , labels[i], (boxes[i][0][0], boxes[i][0][1]-10), 
+        print(labels[i])
+        image = cv2.putText(image , labels[i], (boxes[i][0][0], boxes[i][0][1]+30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
                     thickness=2, lineType=cv2.LINE_AA)
     
