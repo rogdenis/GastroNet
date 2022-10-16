@@ -48,6 +48,7 @@ def loadData():
         idx=random.randint(0,len(imgIds)-1)
         file_name = coco.imgs[idx]['file_name']
         img = cv2.imread(os.path.join(trainDir, file_name))
+        print(img)
         img = cv2.resize(img, imageSize, cv2.INTER_LINEAR)
         ann_ids = coco.getAnnIds(imgIds=idx)
         masks=[]
