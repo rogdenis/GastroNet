@@ -21,7 +21,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
-model.load_state_dict(torch.load("epoch_0.torch"))
+model.load_state_dict(torch.load("epoch_3.torch"))
 model.to(device)# move model to the right devic
 model.eval()
 
@@ -83,7 +83,7 @@ def drawmasks(frame, model):
     result = draw_segmentation_map(orig_image, masks, boxes, labels)
     #print(result.shape)
     #cv2.imwrite("detection1.png", result)
-    return result
+    return result, len(boxes)
 
 def drawSegmentation(frame, jpg_as_text, count, img_name):
     fname = 'predictions/{}_prediction_segmentation4_{}.json'.format(VIDEO_NAME, count)
@@ -155,13 +155,15 @@ def getFrames(model):
         img_name = "frame" + str(count)
         retval, buffer = cv2.imencode('.jpg', frame)
         jpg_as_text = base64.b64encode(buffer)
+        num_objects = 0
         if count > 20:
-            frame = drawmasks(frame, model)
+            frame, num_objects = drawmasks(frame, model)
             frame = drawClassification(frame, jpg_as_text, count, img_name)
         count+=1
         print(count)
         result = np.hstack([orig_frame,frame])
-        cv2.imwrite("image.jpg",result)
+        if num_objects > 0:
+            cv2.imwrite("image.jpg",result)
         video_out.write(result)
         ok, frame = video_in.read()
         if ok:

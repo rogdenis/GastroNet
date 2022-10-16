@@ -6,6 +6,7 @@ import cv2
 import torchvision.models.segmentation
 import torch
 import os
+from copy import copy
 from pprint import pprint
 from pycocotools.coco import COCO
 from torchvision.io import read_image
@@ -14,7 +15,6 @@ from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import draw_segmentation_map, get_outputs, loadData
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-
 TH = 0.8
 
 
@@ -88,12 +88,16 @@ model.eval()
 metrics = {'count': 0}
 i = 0
 for images, targets in valid_dataloader:
+    if targets[0]["boxes"].size()[0] == 1:
+        continue
     outputs = model(images)
     metric = MeanAveragePrecision()
     metric.update(outputs, targets)
     i += 1
-    print(i)
-    if i > 20:
+    # locs = copy(locals())
+    # for l, v in {k: v for k, v in sorted(locs.items(), key=lambda item: -sys.getsizeof(item[0]))}.items():
+    #     print(sys.getsizeof(locals()[l]), l)
+    if i > 30:
         break
         
 pprint(metric.compute())

@@ -21,6 +21,8 @@ from pycocotools.coco import COCO
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.transforms import ToTensor
 from utils import loadData, make_batch
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from pprint import pprint
 
 batchSize=2
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
@@ -95,9 +97,10 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                 step_size=3,
                                                 gamma=0.1)
-model.train()
+
 for epoch in range(100):
     print("Train epoch {}".format(epoch))
+    model.train()
     i = 0
     for images, targets in train_dataloader:
         images = list(image.to(device) for image in images)
@@ -109,14 +112,32 @@ for epoch in range(100):
         losses.backward()
         optimizer.step()
         i += 1
-        print(i,'loss:', losses.item())
+        if i % 20 == 0:
+            print(i,'loss:', losses.item())
     
-    # val_losses = []
-    # start = 0
-    # for images, targets in valid_dataloader:
-    #     val_dict = model(images, targets)
-    #     val_losses.append(float(sum(loss.detach() for loss in val_dict.values())))
-    # print('{} epoch loss: {}'.format(epoch,sum(val_losses)/len(val_losses)))
+    val_losses = []
+    start = 0
+    model.eval()
+    for images, targets in valid_dataloader:
+        if targets[0]["boxes"].size()[0] == 1:
+            continue
+        outputs = model(images)
+        metric = MeanAveragePrecision()
+        metric.update(outputs, targets)
+        i += 1
+        if i > 30:
+            break
+    print('epoch {} loss:'.format(epoch))
+    pprint(metric.compute())
+    del metric
 
     lr_scheduler.step()
     torch.save(model.state_dict(), "epoch_{}.torch".format(epoch))
+    #https://pytorch.org/tutorials/beginner/saving_loading_models.html
+    # torch.save({
+    #         'epoch': epoch,
+    #         'model_state_dict': model.state_dict(),
+    #         'optimizer_state_dict': optimizer.state_dict(),
+    #         'loss': loss,
+    #         ...
+    #         },  "epoch_{}.torch".format(epoch))

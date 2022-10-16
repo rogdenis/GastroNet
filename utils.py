@@ -126,7 +126,6 @@ def draw_segmentation_map(image, masks, boxes, labels):
         image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
                       thickness=2)
         # put the label text above the objects
-        print(labels[i])
         image = cv2.putText(image , labels[i], (boxes[i][0][0], boxes[i][0][1]+30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
                     thickness=2, lineType=cv2.LINE_AA)
