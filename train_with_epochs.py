@@ -23,10 +23,11 @@ from torchvision.transforms import ToTensor
 from utils import loadData, make_batch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from pprint import pprint
+from torch.utils.tensorboard import SummaryWriter
 
 batchSize=2
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
-
+writer = SummaryWriter('runs/train_segmentation')
 
 class CustomImageDataset(Dataset):
     def __init__(self, img_dir, annotations_file, cats=None, transform=None, target_transform=None):
@@ -109,12 +110,13 @@ for epoch in range(100):
         optimizer.zero_grad()
         loss_dict = model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
+        writer.add_scalar('training-loss', losses, epoch * len(train_dataloader) + i)
         losses.backward()
         optimizer.step()
         i += 1
         if i % 20 == 0:
             print(i,'loss:', losses.item())
-    
+
     val_losses = []
     start = 0
     model.eval()
@@ -124,11 +126,9 @@ for epoch in range(100):
         outputs = model(images)
         metric = MeanAveragePrecision()
         metric.update(outputs, targets)
-        i += 1
-        if i > 30:
-            break
     print('epoch {} loss:'.format(epoch))
     pprint(metric.compute())
+    writer.add_scalar('epoch-map', torch.tensor(metric.compute()["map"]).item(), epoch)
     del metric
 
     lr_scheduler.step()

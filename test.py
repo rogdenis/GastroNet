@@ -85,11 +85,10 @@ model.load_state_dict(torch.load("epoch_39.torch"))
 model.to(device)# move model to the right devic
 model.eval()
 
-metrics = {'count': 0}
 i = 0
 for images, targets in valid_dataloader:
     if targets[0]["boxes"].size()[0] == 1:
-        continue
+        continue 
     outputs = model(images)
     metric = MeanAveragePrecision()
     metric.update(outputs, targets)
@@ -97,7 +96,7 @@ for images, targets in valid_dataloader:
     # locs = copy(locals())
     # for l, v in {k: v for k, v in sorted(locs.items(), key=lambda item: -sys.getsizeof(item[0]))}.items():
     #     print(sys.getsizeof(locals()[l]), l)
-    if i > 30:
+    if i > 1:
         break
         
-pprint(metric.compute())
+print(torch.tensor(metric.compute()["map"]).item())
