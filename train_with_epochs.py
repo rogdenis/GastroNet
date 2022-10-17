@@ -101,14 +101,14 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                 step_size=3,
                                                 gamma=0.1)
 start_epoch = 0
-
+last_best = -1
 if len(sys.argv) > 1 and sys.argv[1] == 'continue':
-    PATH =  "epoch_{}.pt".format(sys.argv[2])
+    PATH = sys.argv[2]
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     start_epoch = checkpoint['epoch'] + 1
-    loss = checkpoint['loss']
+    last_best = checkpoint['loss']
 
 for epoch in range(start_epoch,100):
     print("Train epoch {}".format(epoch))
@@ -132,6 +132,8 @@ for epoch in range(start_epoch,100):
     start = 0
     model.eval()
     for images, targets in valid_dataloader:
+        images = list(image.to(device) for image in images)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
         if targets[0]["boxes"].size()[0] == 1:
             continue
         outputs = model(images)
@@ -139,16 +141,20 @@ for epoch in range(start_epoch,100):
         metric.update(outputs, targets)
     print('epoch {} loss:'.format(epoch))
     pprint(metric.compute())
-    PATH =  "epoch_{}.pt".format(epoch)
-    torch.save({
+    main_metric = torch.tensor(metric.compute()["map"]).item()
+    writer.add_scalar('epoch-map', main_metric, epoch)
+    checkpoint = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': losses,
-            }, PATH)
-    writer.add_scalar('epoch-map', torch.tensor(metric.compute()["map"]).item(), epoch)
-    del metric
+            'metric': main_metric
+            }
+    torch.save(checkpoint, "last.pt")
+
+    if main_metric > last_best:
+        last_best = main_metric
+        torch.save(checkpoint, "best.pt")
 
     lr_scheduler.step()
-    torch.save(model.state_dict(), "epoch_{}.torch".format(epoch))
 

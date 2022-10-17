@@ -21,7 +21,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
-model.load_state_dict(torch.load("epoch_1.pt")['model_state_dict'])
+model.load_state_dict(torch.load("best.pt")['model_state_dict'])
 model.to(device)# move model to the right devic
 model.eval()
 
@@ -75,11 +75,11 @@ def getPrediction(fname, jpg_as_text, img_name, prediction_type):
         f.write(json.dumps(data,indent=4))
     return data
 
-def drawmasks(frame, model):
+def drawmasks(frame, model, device):
     orig_image = frame.copy()
     image = torch.as_tensor(frame, dtype=torch.float32).unsqueeze(0)
     image=image.swapaxes(1, 3).swapaxes(2, 3)
-    masks, boxes, labels = get_outputs(image, model, TH)
+    masks, boxes, labels = get_outputs(image.to(device), model, TH)
     result = draw_segmentation_map(orig_image, masks, boxes, labels)
     #print(result.shape)
     #cv2.imwrite("detection1.png", result)
@@ -157,8 +157,8 @@ def getFrames(model):
         jpg_as_text = base64.b64encode(buffer)
         num_objects = 0
         if count > 20:
-            frame, num_objects = drawmasks(frame, model)
-            frame = drawClassification(frame, jpg_as_text, count, img_name)
+            frame, num_objects = drawmasks(frame, model, device)
+            #frame = drawClassification(frame, jpg_as_text, count, img_name)
         count+=1
         print(count)
         result = np.hstack([orig_frame,frame])
