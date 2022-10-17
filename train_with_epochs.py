@@ -2,10 +2,11 @@
 #DONE #https://zenodo.org/record/4736111/files/LabPicsChemistry.zip?download=1
 #DONE #https://github.com/sagieppel/Train_Mask-RCNN-for-object-detection-in_In_60_Lines-of-Code
 #DONE валидация
-#метрики
+#DONE метрики
 #https://towardsdatascience.com/a-comprehensive-guide-to-image-augmentation-using-pytorch-fb162f2444be - аугментация
 #GPU
-#тензорборда
+#DONE тензорборда
+#DONE https://pytorch.org/tutorials/beginner/saving_loading_models.html - загрузка моделей
 
 import random
 import json
@@ -13,6 +14,7 @@ import numpy as np
 import cv2
 import os
 import torch
+import sys
 import torchvision.models.segmentation
 from torchvision.io import read_image
 from torch.utils.data import Dataset
@@ -98,8 +100,17 @@ optimizer = torch.optim.AdamW(params=model.parameters(), lr=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                 step_size=3,
                                                 gamma=0.1)
+start_epoch = 0
 
-for epoch in range(100):
+if len(sys.argv) > 1 and sys.argv[1] == 'continue':
+    PATH =  "epoch_{}.pt".format(sys.argv[2])
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    start_epoch = checkpoint['epoch'] + 1
+    loss = checkpoint['loss']
+
+for epoch in range(start_epoch,100):
     print("Train epoch {}".format(epoch))
     model.train()
     i = 0
@@ -128,16 +139,16 @@ for epoch in range(100):
         metric.update(outputs, targets)
     print('epoch {} loss:'.format(epoch))
     pprint(metric.compute())
+    PATH =  "epoch_{}.pt".format(epoch)
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': losses,
+            }, PATH)
     writer.add_scalar('epoch-map', torch.tensor(metric.compute()["map"]).item(), epoch)
     del metric
 
     lr_scheduler.step()
     torch.save(model.state_dict(), "epoch_{}.torch".format(epoch))
-    #https://pytorch.org/tutorials/beginner/saving_loading_models.html
-    # torch.save({
-    #         'epoch': epoch,
-    #         'model_state_dict': model.state_dict(),
-    #         'optimizer_state_dict': optimizer.state_dict(),
-    #         'loss': loss,
-    #         ...
-    #         },  "epoch_{}.torch".format(epoch))
+

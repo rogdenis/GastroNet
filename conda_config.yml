@@ -75,4 +75,7 @@ dependencies:
   - zstd=1.5.2=ha4553b6_0
   - pip:
     - opencv-python==4.5.5.64
+    - pycocotools
+    - torchmetrics
+    - tensorboard
 prefix: /home/rogdenis/miniconda/envs/maskRcnn
