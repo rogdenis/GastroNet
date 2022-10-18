@@ -13,8 +13,10 @@ from torchvision.io import read_image
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from utils import draw_segmentation_map, get_outputs, loadData
+from utils import draw_segmentation_map, get_outputs, loadData, filter_by_threshold
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from torchmetrics import PrecisionRecallCurve
+from pprint import pprint
 TH = 0.8
 
 
@@ -71,32 +73,34 @@ def collate_fn(batch):
 
 
 train = CustomImageDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json')
-valid = CustomImageDataset('Gastro.v1i.coco-segmentation/valid', '_annotations.coco.json', cats=train.cats)
+test = CustomImageDataset('Gastro.v1i.coco-segmentation/test', '_annotations.coco.json', cats=train.cats)
 print(train.cats)
 
 train_dataloader = DataLoader(train, batch_size=2, shuffle=True, collate_fn=collate_fn)
-valid_dataloader = DataLoader(valid, batch_size=1, shuffle=True, collate_fn=collate_fn)
+test_dataloader = DataLoader(test, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
-model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=len(train.cats))  # replace the pre-trained head with a new one
-model.load_state_dict(torch.load("epoch_39.torch"))
+model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
+checkpoint = torch.load("best.pt")
+model.load_state_dict(checkpoint['model_state_dict'])
 model.to(device)# move model to the right devic
 model.eval()
+print(checkpoint['epoch'])
 
 i = 0
-for images, targets in valid_dataloader:
-    if targets[0]["boxes"].size()[0] == 1:
-        continue 
+main_metric = {str(th/10):0 for th in range(11)}
+for images, targets in test_dataloader:
+    images = list(image.to(device) for image in images)
+    targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
     outputs = model(images)
-    metric = MeanAveragePrecision()
-    metric.update(outputs, targets)
+    for score in main_metric.keys():
+        metric = MeanAveragePrecision(class_metrics=True, rec_thresholds=[0.8], iou_thresholds = [0.5])
+        metric.update(filter_by_threshold(outputs, float(score)), targets)
+        main_metric[score] += torch.tensor(metric.compute()["map"]).item()
     i += 1
-    # locs = copy(locals())
-    # for l, v in {k: v for k, v in sorted(locs.items(), key=lambda item: -sys.getsizeof(item[0]))}.items():
-    #     print(sys.getsizeof(locals()[l]), l)
-    if i > 1:
-        break
-        
-print(torch.tensor(metric.compute()["map"]).item())
+print(metric.compute())
+
+for score, value in main_metric.items():
+    print("{}: {}".format(score, value / len(test_dataloader)))

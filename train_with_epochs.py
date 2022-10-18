@@ -91,7 +91,7 @@ print(train.__len__())
 train_dataloader = DataLoader(train, batch_size=2, shuffle=True, collate_fn=collate_fn)
 valid_dataloader = DataLoader(valid, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
-model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
+model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes=1+len(train.cats))  # replace the pre-trained head with a new one
 model.to(device)# move model to the right devic
@@ -108,7 +108,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'continue':
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     start_epoch = checkpoint['epoch'] + 1
-    last_best = checkpoint['loss']
+    last_best = checkpoint['metric']
 
 for epoch in range(start_epoch,100):
     print("Train epoch {}".format(epoch))
@@ -131,17 +131,22 @@ for epoch in range(start_epoch,100):
     val_losses = []
     start = 0
     model.eval()
+    main_metric = 0
     for images, targets in valid_dataloader:
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        if targets[0]["boxes"].size()[0] == 1:
-            continue
-        outputs = model(images)
+        # if targets[0]["boxes"].size()[0] == 1:
+        #     continue
+        model.eval()
+        with torch.no_grad():
+            outputs = model(images)
         metric = MeanAveragePrecision()
         metric.update(outputs, targets)
-    print('epoch {} loss:'.format(epoch))
-    pprint(metric.compute())
-    main_metric = torch.tensor(metric.compute()["map"]).item()
+        main_metric += metric.compute()["map"].clone().detach().item()
+    main_metric /= len(valid_dataloader)
+
+    print('epoch {} map: {}'.format(epoch, main_metric))
+    
     writer.add_scalar('epoch-map', main_metric, epoch)
     checkpoint = {
             'epoch': epoch,

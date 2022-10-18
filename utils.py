@@ -103,6 +103,43 @@ def get_outputs(image, model, threshold):
     labels = [coco_names[i] for i in outputs[0]['labels']]
     return masks, boxes, labels
 
+def get_outputs(image, model, threshold):
+    with torch.no_grad():
+        # forward pass of the image through the modle
+        outputs = model(image)
+    scores = list(outputs[0]['scores'].detach().cpu().numpy())
+    # index of those scores which are above a certain threshold
+    thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
+    thresholded_preds_count = len(thresholded_preds_inidices)
+    # get the masks
+    masks = (outputs[0]['masks']>0.5).squeeze().detach().cpu().numpy()
+    # discard masks for objects which are below threshold
+    masks = masks[:thresholded_preds_count]
+
+    # get the bounding boxes, in (x1, y1), (x2, y2) format
+    boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in outputs[0]['boxes'].detach().cpu()]
+    # discard bounding boxes below threshold value
+    boxes = boxes[:thresholded_preds_count]
+
+    # get the classes labels
+    labels = [coco_names[i] for i in outputs[0]['labels']]
+    return masks, boxes, labels
+
+def filter_by_threshold(outputs, threshold):
+    outs = []
+    for output in outputs:
+        out = {}
+        scores = list(output['scores'].detach().cpu().numpy())
+        thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
+        thresholded_preds_count = len(thresholded_preds_inidices)
+        out['scores'] = output['scores'][:thresholded_preds_count]
+        masks = (output['masks']>0.5).squeeze().detach().cpu().numpy()
+        out['masks'] = masks[:thresholded_preds_count]
+        out['boxes'] = output['boxes'][:thresholded_preds_count]
+        out['labels'] = output['labels'][:thresholded_preds_count]
+        outs.append(out)
+    return outs
+
 def draw_segmentation_map(image, masks, boxes, labels):
     alpha = 1 
     beta = 0.3 # transparency for the segmentation map

@@ -78,7 +78,7 @@ def getPrediction(fname, jpg_as_text, img_name, prediction_type):
 def drawmasks(frame, model, device):
     orig_image = frame.copy()
     image = torch.as_tensor(frame, dtype=torch.float32).unsqueeze(0)
-    image=image.swapaxes(1, 3).swapaxes(2, 3)
+    image = image.swapaxes(1, 3).swapaxes(2, 3)
     masks, boxes, labels = get_outputs(image.to(device), model, TH)
     result = draw_segmentation_map(orig_image, masks, boxes, labels)
     #print(result.shape)
