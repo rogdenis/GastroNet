@@ -13,7 +13,7 @@ from torchvision.io import read_image
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from utils import draw_segmentation_map, get_outputs, loadData, filter_by_threshold
+from utils import draw_segmentation_map, get_outputs, loadData, filter_by_threshold, draw_segmentation_map
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchmetrics import PrecisionRecallCurve
 from pprint import pprint
@@ -71,6 +71,15 @@ class CustomImageDataset(Dataset):
 def collate_fn(batch):
     return tuple(zip(*batch))
 
+def drawmasks(frame, model, device):
+    orig_image = frame.copy()
+    image = torch.as_tensor(frame, dtype=torch.float32).unsqueeze(0)
+    image = image.swapaxes(1, 3).swapaxes(2, 3)
+    masks, boxes, labels = get_outputs(image.to(device), model, TH)
+    result = draw_segmentation_map(orig_image, masks, boxes, labels)
+    #print(result.shape)
+    #cv2.imwrite("detection1.png", result)
+    return result, len(boxes)
 
 train = CustomImageDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json')
 test = CustomImageDataset('Gastro.v1i.coco-segmentation/test', '_annotations.coco.json', cats=train.cats)
@@ -92,15 +101,23 @@ print(checkpoint['epoch'])
 i = 0
 main_metric = {str(th/10):0 for th in range(11)}
 for images, targets in test_dataloader:
+    frame = images[0].cpu().detach().numpy()
     images = list(image.to(device) for image in images)
     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
     outputs = model(images)
-    for score in main_metric.keys():
-        metric = MeanAveragePrecision(class_metrics=True, rec_thresholds=[0.8], iou_thresholds = [0.5])
-        metric.update(filter_by_threshold(outputs, float(score)), targets)
-        main_metric[score] += torch.tensor(metric.compute()["map"]).item()
-    i += 1
-print(metric.compute())
+    predict = draw_segmentation_map(frame, outputs[0]["masks"], outputs[0]["boxes"], outputs[0]["labels"])
+    cv2.imwrite("predict.jpg",predict)
+    print(frame)
+    gt = draw_segmentation_map(frame, targets[0]["masks"], targets[0]["boxes"], targets[0]["labels"])
+    cv2.imwrite("gt.jpg",gt)
+    print("done")
+    break
+    
+#     for score in main_metric.keys():
+#         metric = MeanAveragePrecision(class_metrics=True, rec_thresholds=[0.8], iou_thresholds = [0.5])
+#         metric.update(filter_by_threshold(outputs, float(score)), targets)
+#         main_metric[score] += torch.tensor(metric.compute()["map"]).item()
+#     i += 1
 
-for score, value in main_metric.items():
-    print("{}: {}".format(score, value / len(test_dataloader)))
+# for score, value in main_metric.items():
+#     print("{}: {}".format(score, value / len(test_dataloader)))
