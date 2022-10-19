@@ -102,14 +102,24 @@ i = 0
 main_metric = {str(th/10):0 for th in range(11)}
 for images, targets in test_dataloader:
     frame = images[0].cpu().detach().numpy()
-    images = list(image.to(device) for image in images)
-    targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-    outputs = model(images)
-    predict = draw_segmentation_map(frame, outputs[0]["masks"], outputs[0]["boxes"], outputs[0]["labels"])
-    cv2.imwrite("predict.jpg",predict)
-    print(frame)
-    gt = draw_segmentation_map(frame, targets[0]["masks"], targets[0]["boxes"], targets[0]["labels"])
-    cv2.imwrite("gt.jpg",gt)
+    img_copy = copy(frame)
+    # images = list(image.to(device) for image in images)
+    # targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+    # outputs = model(images)
+    # predict = draw_segmentation_map(frame, outputs[0]["masks"], outputs[0]["boxes"], outputs[0]["labels"])
+    s = cv2.imread("image.jpg")
+    # predict = predict.swapaxes(0, 2)
+    # print(predict.shape)
+    # #print(predict)
+    # print(s.shape)
+    # #print(s)
+    frame = frame.astype(int).swapaxes(0, 2).swapaxes(0, 1)
+    print(np.histogram(frame.flatten()))
+    print(np.histogram(s.flatten()))
+    print(cv2.imwrite("predict.jpg", img_copy*255))
+    #print(frame)
+    #gt = draw_segmentation_map(frame, targets[0]["masks"], targets[0]["boxes"], targets[0]["labels"])
+    #cv2.imwrite("gt.jpg",gt)
     print("done")
     break
     
