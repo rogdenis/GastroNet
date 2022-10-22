@@ -3,10 +3,13 @@ import numpy as np
 import random
 import torch
 import os
+from time import time
 from pycocotools.coco import COCO
+import torchvision.ops
 import torchvision.transforms as T
+from mean_average_precision import MetricBuilder
+from collections import Counter
 
-imageSize = [800,600]
 coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
 coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
 coco_names.insert(0,"bg")
@@ -21,109 +24,20 @@ def make_coco(trainDir):
     random.shuffle(imgIds)
     cats = {v: k for k, v in dict(enumerate(coco.getCatIds())).items()}
     return(coco, imgIds, cats)
+
+
+def filter_nms(outputs):
+    outs = []
+    for output in outputs:
+        out = {}
+        indexes = torchvision.ops.nms(output['boxes'], output['scores'], iou_threshold=0.1)
+        out['scores'] = output['scores'][indexes]
+        out['masks'] = output['masks'][indexes]
+        out['boxes'] = output['boxes'][indexes]
+        out['labels'] = output['labels'][indexes]
+        outs.append(out)
+    return outs
     
-def loadData(trainDir, onlycats=False, cats=None, augmentation=False):
-    coco = COCO(os.path.join(trainDir,'_annotations.coco.json'))
-    imgIds = coco.getImgIds()
-    random.shuffle(imgIds)
-    if cats is None:
-        cats = {v: k for k, v in dict(enumerate(coco.getCatIds())).items()}
-    dataset = []
-    while onlycats == False and len(imgIds) > 0:
-        idx=imgIds[0]
-        file_name = coco.imgs[idx]['file_name']
-        img = cv2.imread(os.path.join(trainDir, file_name))
-        img = cv2.resize(img, imageSize, cv2.INTER_LINEAR)
-        ann_ids = coco.getAnnIds(imgIds=idx)
-        masks=[]
-        labels=[]
-        for ann_id in ann_ids:
-            ann = coco.loadAnns(ann_id)
-            mask = coco.annToMask(ann[0])
-            #mask=cv2.resize(mask,imageSize,cv2.INTER_NEAREST)
-            masks.append(mask)
-            labels.append(cats[ann[0]['category_id']])
-        num_objs = len(masks)
-        imgIds.pop(0)
-        if num_objs == 0: 
-            continue
-        boxes = torch.zeros([num_objs,4], dtype=torch.float32)
-        for i in range(num_objs):
-            x,y,w,h = cv2.boundingRect(masks[i])
-            boxes[i] = torch.tensor([x, y, x+w, y+h])
-        masks = torch.as_tensor(masks, dtype=torch.uint8)
-        img = torch.as_tensor(img, dtype=torch.float32)
-        imgs=[img]
-        if augmentation:
-            #imgs += [T.GaussianBlur(kernel_size=(51, 91), sigma=sigma)(img) for sigma in range(2,10)]
-            imgs += [T.RandomRotation(degrees=d)(img) for d in range(0,5)]
-        for img in imgs:
-            #print(img.shape)
-            data = {}
-            data["boxes"] =  boxes
-            data["labels"] = torch.tensor(labels, dtype=torch.int64)#torch.ones((num_objs,), dtype=torch.int64)   # there is only one class
-            data["masks"] = masks
-            dataset.append((img, data))
-    return dataset, cats
-
-def make_batch(dataset, batchSize, start):
-    #print(dataset[0][1])
-    batch_Imgs = []
-    batch_Data = []
-    while len(batch_Imgs) < batchSize:
-        batch_Imgs.append(dataset[start][0])
-        batch_Data.append(dataset[start][1])
-        start += 1
-    batch_Imgs = torch.stack([torch.as_tensor(d) for d in batch_Imgs], 0)
-    batch_Imgs = batch_Imgs.swapaxes(1, 3).swapaxes(2, 3)
-    return batch_Imgs, batch_Data, start
-
-
-def get_outputs(image, model, threshold):
-    with torch.no_grad():
-        # forward pass of the image through the modle
-        outputs = model(image)
-    
-    # get all the scores
-    scores = list(outputs[0]['scores'].detach().cpu().numpy())
-    # index of those scores which are above a certain threshold
-    thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
-    thresholded_preds_count = len(thresholded_preds_inidices)
-    # get the masks
-    masks = (outputs[0]['masks']>0.5).squeeze().detach().cpu().numpy()
-    # discard masks for objects which are below threshold
-    masks = masks[:thresholded_preds_count]
-
-    # get the bounding boxes, in (x1, y1), (x2, y2) format
-    boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in outputs[0]['boxes'].detach().cpu()]
-    # discard bounding boxes below threshold value
-    boxes = boxes[:thresholded_preds_count]
-
-    # get the classes labels
-    labels = [coco_names[i] for i in outputs[0]['labels']]
-    return masks, boxes, labels
-
-def get_outputs(image, model, threshold):
-    with torch.no_grad():
-        # forward pass of the image through the modle
-        outputs = model(image)
-    scores = list(outputs[0]['scores'].detach().cpu().numpy())
-    # index of those scores which are above a certain threshold
-    thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
-    thresholded_preds_count = len(thresholded_preds_inidices)
-    # get the masks
-    masks = (outputs[0]['masks']>0.5).squeeze().detach().cpu().numpy()
-    # discard masks for objects which are below threshold
-    masks = masks[:thresholded_preds_count]
-
-    # get the bounding boxes, in (x1, y1), (x2, y2) format
-    boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in outputs[0]['boxes'].detach().cpu()]
-    # discard bounding boxes below threshold value
-    boxes = boxes[:thresholded_preds_count]
-
-    # get the classes labels
-    labels = [coco_names[i] for i in outputs[0]['labels']]
-    return masks, boxes, labels
 
 def filter_by_threshold(outputs, threshold):
     outs = []
@@ -133,19 +47,62 @@ def filter_by_threshold(outputs, threshold):
         thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
         thresholded_preds_count = len(thresholded_preds_inidices)
         out['scores'] = output['scores'][:thresholded_preds_count]
-        masks = (output['masks']>0.5).squeeze().detach().cpu().numpy()
+        masks = (output['masks']>0.6).squeeze().detach().cpu().numpy()
         out['masks'] = masks[:thresholded_preds_count]
         out['boxes'] = output['boxes'][:thresholded_preds_count]
         out['labels'] = output['labels'][:thresholded_preds_count]
         outs.append(out)
     return outs
 
-def draw_segmentation_map(image, masks, boxes, labels):
+def convert_to_array(detections, targets):
+    preds_boxes = detections['boxes'].cpu().numpy()
+    preds_scores = detections['scores'].cpu().numpy()
+    preds_labels = detections['labels'].cpu().numpy()
+    preds = np.column_stack((preds_boxes, preds_labels, preds_scores))
+
+    gt_boxes = targets['boxes'].cpu().numpy()
+    gt_labels = targets['labels'].cpu().numpy()
+    zeros = np.zeros(len(gt_boxes))
+    gt = np.column_stack((gt_boxes,gt_labels, zeros, zeros))
+    return preds, gt
+
+def calculate_metrics(detections, targets, classes, iou):
+    #print(detections)
+    labels_gt = Counter(targets[:,4])
+    labels_preds = Counter(detections[:,4])
+    gt_num = len(targets[:,4])
+    preds_num = len(detections[:,4])
+    metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=classes)
+    metric_fn.add(detections, targets)
+    map_stat = metric_fn.value(iou_thresholds=iou)[iou]
+    TP = 0
+    FP = 0
+    #print(metric_fn.value(iou_thresholds=0.5))
+    for label, stat in map_stat.items():
+        #print(label, stat)
+        cl_tp = labels_gt[label] * stat['recall'][-1] if len(stat['recall']) > 0 else 0
+        cl_fp = labels_preds[label] - cl_tp
+        #print(cl_tp)
+        TP += cl_tp
+        FP += cl_fp
+    recall = TP * 1.0 / gt_num if gt_num > 0 else 0
+    precision = TP * 1.0 / preds_num if preds_num > 0 else 0
+    FP = preds_num - TP
+    FN = gt_num - TP
+    return TP, FP, FN
+
+
+def draw_segmentation_map(image, output):
     alpha = 1 
     beta = 0.3 # transparency for the segmentation map
     gamma = 0 # scalar added to each sum
-    for i in range(len(masks)):
+    # print(output['masks'])
+    # print(output['labels'])
+    # print(output['boxes'])
+    masks, boxes, labels, scores = output['masks'], output['boxes'], output['labels'], output.get('scores', None)
+    for i in range(len(output['masks'])):
         try:
+            #print(boxes[i])
             #convert the original PIL image into NumPy format
             image = np.array(image)
             red_map = np.zeros_like(masks[i]).astype(np.uint8)
@@ -161,10 +118,16 @@ def draw_segmentation_map(image, masks, boxes, labels):
             # apply mask on the image
             image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
             # draw the bounding boxes around the objects
+            boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
             image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
-                        thickness=2)
-            # put the label text above the objects
-            image = cv2.putText(image , labels[i], (boxes[i][0][0], boxes[i][0][1]+30), 
+                                thickness=2)
+            # get the classes labels
+            if scores is not None:
+                label = "{:.2f}: {}".format(scores[i], coco_names[output['labels'][i]])
+            else:
+                label = coco_names[output['labels'][i]]
+            # # put the label text above the objects
+            image = cv2.putText(image , label, (boxes[i][0][0], boxes[i][0][1]+30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
                         thickness=2, lineType=cv2.LINE_AA)
         except:
