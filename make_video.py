@@ -16,15 +16,18 @@ from requests.adapters import HTTPAdapter, Retry
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import draw_segmentation_map, filter_by_threshold, filter_nms
 
-TH = sys.argv[1]
+VIDEO_NAME = sys.argv[1]
+TH = sys.argv[2]
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
 PATH = "best.pt"
-if len(sys.argv) > 2: PATH = sys.argv[2]
-model.load_state_dict(torch.load("last.pt")['model_state_dict'])
+if len(sys.argv) > 3: PATH = sys.argv[3]
+checkpoint = torch.load(PATH)
+model.load_state_dict(checkpoint['model_state_dict'])
+print(checkpoint['epoch'])
 model.to(device)# move model to the right devic
 model.eval()
 
@@ -44,7 +47,6 @@ COLORS = {
 'Duodenum': tuple(random.randint(0,255) for x in range(3))
 }
 
-VIDEO_NAME = sys.argv[1]
 TYPES = {
     "SEGMENTATION": {
         "KEY": "dKmUZU6MLwX9R504E4M1",
