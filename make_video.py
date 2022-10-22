@@ -17,7 +17,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import draw_segmentation_map, filter_by_threshold, filter_nms
 
 VIDEO_NAME = sys.argv[1]
-TH = sys.argv[2]
+TH = float(sys.argv[2])
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
