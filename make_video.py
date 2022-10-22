@@ -6,6 +6,7 @@ import io
 import json
 import torch
 import random
+from time import time
 import numpy as np
 import os.path
 import urllib.parse
@@ -13,15 +14,20 @@ import torchvision.models.segmentation
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from utils import draw_segmentation_map, get_outputs, loadData
+from utils import draw_segmentation_map, filter_by_threshold, filter_nms
 
-TH = 0.5
+VIDEO_NAME = sys.argv[1]
+TH = float(sys.argv[2])
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
-model.load_state_dict(torch.load("epoch_1.pt")['model_state_dict'])
+PATH = "best.pt"
+if len(sys.argv) > 3: PATH = sys.argv[3]
+checkpoint = torch.load(PATH)
+model.load_state_dict(checkpoint['model_state_dict'])
+print(checkpoint['epoch'])
 model.to(device)# move model to the right devic
 model.eval()
 
@@ -41,7 +47,6 @@ COLORS = {
 'Duodenum': tuple(random.randint(0,255) for x in range(3))
 }
 
-VIDEO_NAME = sys.argv[1]
 TYPES = {
     "SEGMENTATION": {
         "KEY": "dKmUZU6MLwX9R504E4M1",
@@ -75,15 +80,6 @@ def getPrediction(fname, jpg_as_text, img_name, prediction_type):
         f.write(json.dumps(data,indent=4))
     return data
 
-def drawmasks(frame, model):
-    orig_image = frame.copy()
-    image = torch.as_tensor(frame, dtype=torch.float32).unsqueeze(0)
-    image=image.swapaxes(1, 3).swapaxes(2, 3)
-    masks, boxes, labels = get_outputs(image, model, TH)
-    result = draw_segmentation_map(orig_image, masks, boxes, labels)
-    #print(result.shape)
-    #cv2.imwrite("detection1.png", result)
-    return result, len(boxes)
 
 def drawSegmentation(frame, jpg_as_text, count, img_name):
     fname = 'predictions/{}_prediction_segmentation4_{}.json'.format(VIDEO_NAME, count)
@@ -151,26 +147,28 @@ def getFrames(model):
     scores = []
     switches = 0
     pred = None
-    while ok:
-        img_name = "frame" + str(count)
-        retval, buffer = cv2.imencode('.jpg', frame)
-        jpg_as_text = base64.b64encode(buffer)
-        num_objects = 0
-        if count > 20:
-            frame, num_objects = drawmasks(frame, model)
-            frame = drawClassification(frame, jpg_as_text, count, img_name)
-        count+=1
-        print(count)
-        result = np.hstack([orig_frame,frame])
-        if num_objects > 0:
-            cv2.imwrite("image.jpg",result)
+    i = 0
+    while ok and count <= 400:
+        image = torch.as_tensor(frame, dtype=torch.float32).unsqueeze(0)
+        image = image.swapaxes(1, 3).swapaxes(2, 3)
+        with torch.no_grad():
+            outputs = model(image.to(device))
+        outputs = filter_nms(outputs)
+        filtered_outs = filter_by_threshold(outputs, TH)
+        if len(filtered_outs[0]['labels']) > 0:
+            print(i)
+        predict = draw_segmentation_map(frame, filtered_outs[0])
+        result = np.hstack([orig_frame,predict])
         video_out.write(result)
         ok, frame = video_in.read()
         if ok:
             orig_frame = frame.copy()
+        i += 1
     
     cv2.destroyAllWindows()
     video_in.release()
     video_out.release()
 
+now = time()
 getFrames(model)
+print(time()-now, (time()-now) / 400)
