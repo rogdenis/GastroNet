@@ -78,4 +78,5 @@ dependencies:
     - pycocotools
     - torchmetrics
     - tensorboard
+    - mean-average-precision
 prefix: /home/rogdenis/miniconda/envs/maskRcnn

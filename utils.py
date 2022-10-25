@@ -3,12 +3,15 @@ import numpy as np
 import random
 import torch
 import os
-from time import time
-from pycocotools.coco import COCO
 import torchvision.ops
-import torchvision.transforms as T
+from time import time
+from torchvision import transforms
+from pycocotools.coco import COCO
+from torchvision.io import read_image
+from torch.utils.data import Dataset
 from mean_average_precision import MetricBuilder
 from collections import Counter
+
 
 coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
 coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
@@ -16,6 +19,70 @@ coco_names.insert(0,"bg")
 
 # this will help us create a different color for each class
 COLORS = np.random.uniform(0, 255, size=(len(coco_names), 3))
+
+
+class CustomImageDataset(Dataset):
+    def __init__(self, img_dir, annotations_file, cats=None, image_transform=None, coords_transform=None, bg=True):
+        self.img_dir = img_dir
+        self.coco = COCO(os.path.join(img_dir, annotations_file))
+        if cats is None:
+            self.cats = {v: k+1 for k, v in dict(enumerate(self.coco.getCatIds())).items()}
+        else:
+            self.cats = cats
+        self.image_transform = image_transform
+        self.coords_transform = coords_transform
+        self.bg = bg
+
+    def __len__(self):
+        return len(self.coco.getImgIds())
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
+        image = cv2.imread(img_path)#read_image(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if self.image_transform:
+            transformed = self.image_transform(image=image)
+            image = transformed['image']
+        ann_ids = self.coco.getAnnIds(imgIds=idx)
+        num_objs = len(ann_ids)
+        masks = []
+        labels = []
+        boxes = torch.zeros([num_objs,4], dtype=torch.float32)
+        if self.bg:
+            num_objs += 1
+            boxes = torch.zeros([num_objs,4], dtype=torch.float32)
+            bg = np.zeros(image.shape[:2],dtype=np.uint8)
+            masks = [bg]
+            labels = [0]
+            boxes[0] = torch.tensor([0, 0, image.shape[1], image.shape[0]])
+        for ann_id in ann_ids:
+            ann = self.coco.loadAnns(ann_id)
+            mask = self.coco.annToMask(ann[0])
+            masks.append(mask)
+            labels.append(self.cats[ann[0]['category_id']])
+        if self.coords_transform:
+            transformed = self.coords_transform(image=image, masks=masks)
+            image = transformed['image']
+            masks = transformed['masks']
+            image = torch.as_tensor(image, dtype=torch.float32)
+        for i in range(int(self.bg), num_objs):
+            x,y,w,h = cv2.boundingRect(masks[i])
+            boxes[i] = torch.tensor([x, y, x+w, y+h])
+        masks = torch.as_tensor(masks, dtype=torch.float32)
+        image = torch.as_tensor(image, dtype=torch.float32).swapaxes(0, 2).swapaxes(1, 2)
+        data = {}
+        data["boxes"] =  boxes
+        data["labels"] = torch.tensor(labels, dtype=torch.int64)#torch.ones((num_objs,), dtype=torch.int64)   # there is only one class
+        data["masks"] = masks
+        return image, data
+
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
 
 
 def make_coco(trainDir):
@@ -46,11 +113,11 @@ def filter_by_threshold(outputs, threshold):
         scores = list(output['scores'].detach().cpu().numpy())
         thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
         thresholded_preds_count = len(thresholded_preds_inidices)
-        out['scores'] = output['scores'][:thresholded_preds_count]
+        out['scores'] = output['scores'][thresholded_preds_inidices]
         masks = (output['masks']>0.6).squeeze().detach().cpu().numpy()
-        out['masks'] = masks[:thresholded_preds_count]
-        out['boxes'] = output['boxes'][:thresholded_preds_count]
-        out['labels'] = output['labels'][:thresholded_preds_count]
+        out['masks'] = masks[thresholded_preds_inidices]
+        out['boxes'] = output['boxes'][thresholded_preds_inidices]
+        out['labels'] = output['labels'][thresholded_preds_inidices]
         outs.append(out)
     return outs
 
