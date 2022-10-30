@@ -3,6 +3,7 @@ import numpy as np
 import random
 import torch
 import os
+import random
 import torchvision.ops
 from time import time
 from torchvision import transforms
@@ -22,7 +23,7 @@ COLORS = np.random.uniform(0, 255, size=(len(coco_names), 3))
 
 
 class CustomImageDataset(Dataset):
-    def __init__(self, img_dir, annotations_file, cats=None, image_transform=None, coords_transform=None, bg=True):
+    def __init__(self, img_dir, annotations_file, cats=None, image_transform=None, coords_transform=None, bg=True, empty_rate=100):
         self.img_dir = img_dir
         self.coco = COCO(os.path.join(img_dir, annotations_file))
         if cats is None:
@@ -32,19 +33,32 @@ class CustomImageDataset(Dataset):
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.bg = bg
+        self.balanced_index = []
+        empty = []
+        for idx in range(len(self.coco.getImgIds())):
+            if len(self.coco.getAnnIds(imgIds=idx)) > 0:
+                self.balanced_index.append(idx)
+            else:
+                empty.append(idx)
+        K = int(min(len(empty), len(self.balanced_index) * empty_rate))
+        indices = random.sample(range(len(empty)), K)
+        self.balanced_index += [empty[i] for i in sorted(indices)]
+        random.shuffle(self.balanced_index)
+        print("empty", len(indices), "all", len(self.balanced_index))
 
     def __len__(self):
-        return len(self.coco.getImgIds())
+        return len(self.balanced_index)
 
     def __getitem__(self, idx):
+        idx = self.balanced_index[idx]
+        ann_ids = self.coco.getAnnIds(imgIds=idx)
+        num_objs = len(ann_ids)
         img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
         image = cv2.imread(img_path)#read_image(img_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if self.image_transform:
             transformed = self.image_transform(image=image)
             image = transformed['image']
-        ann_ids = self.coco.getAnnIds(imgIds=idx)
-        num_objs = len(ann_ids)
         masks = []
         labels = []
         boxes = torch.zeros([num_objs,4], dtype=torch.float32)
