@@ -34,8 +34,6 @@ coords_transform = A.Compose([
     A.Flip(p=1)
 ])
 
-writer = SummaryWriter('runs/test_segmentation')
-
 train = CustomImageDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json')
 test = CustomImageDataset('Gastro.v1i.coco-segmentation/test', '_annotations.coco.json',
     # image_transform=image_transform,
@@ -58,6 +56,8 @@ model.load_state_dict(checkpoint['model_state_dict'])
 model.to(device)# move model to the right devic
 model.eval()
 print("epoch", checkpoint['epoch'])
+print("params", checkpoint['params'])
+writer = SummaryWriter(checkpoint['params'])
 
 i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
@@ -100,7 +100,7 @@ for th, vals in GL.items():
     if (vals["TP"] + vals["FP"]) > 0 and (vals["TP"] + vals["FN"]) > 0:
         precision = vals["TP"] / (vals["TP"] + vals["FP"])
         recall = vals["TP"] / (vals["TP"] + vals["FN"])
-        writer.add_scalars('test-thersholds', {
+        writer.add_scalars('test-thersholds_{}'.format(checkpoint['params'].replace("/","")), {
             "precision": precision,
             "recall": recall,
             "falses": vals["FP"] / len(test_dataloader)},
