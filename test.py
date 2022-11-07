@@ -49,7 +49,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
 model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
-PATH = "last.pt"
+PATH = "best.pt"
 if len(sys.argv) > 1: PATH = sys.argv[1]
 checkpoint = torch.load(PATH)
 model.load_state_dict(checkpoint['model_state_dict'])
