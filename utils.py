@@ -10,7 +10,6 @@ from torchvision import transforms
 from pycocotools.coco import COCO
 from torchvision.io import read_image
 from torch.utils.data import Dataset
-from mean_average_precision import MetricBuilder
 from collections import Counter
 
 
@@ -21,8 +20,50 @@ coco_names.insert(0,"bg")
 # this will help us create a different color for each class
 COLORS = np.random.uniform(0, 255, size=(len(coco_names), 3))
 
+class ClassificationDataset(Dataset):
+    def __init__(self, img_dir, annotations_file, image_transform=None, coords_transform=None):
+        self.img_dir = img_dir
+        self.image_transform = image_transform
+        self.coords_transform = coords_transform
+        self.indx = []
+        with open(os.path.join(img_dir, annotations_file)) as f:
+            i = 0
+            for line in f:
+                if i > 0:            
+                    tabs = line.strip().split(', ')
+                    fname = tabs[0]
+                    try:
+                        cl = tabs[1:].index('1')
+                    except:
+                        print(tabs)
+                        raise
+                    blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
+                    variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
+                    if blur > 100 or variance > 2500:
+                        self.indx.append((fname, cl))
 
-class CustomImageDataset(Dataset):
+                i += 1
+
+    def __len__(self):
+        return len(self.indx)
+
+    def __getitem__(self, idx):
+        obj = self.indx[idx]
+        img_path = os.path.join(self.img_dir, obj[0])
+        image = cv2.imread(img_path)#read_image(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if self.image_transform:
+            transformed = self.image_transform(image=image)
+            image = transformed['image']
+        if self.coords_transform:
+            transformed = self.coords_transform(image=image)
+            image = transformed['image']
+            image = torch.as_tensor(image, dtype=torch.float32)
+        data = obj[1]
+        image = torch.as_tensor(image, dtype=torch.float32).swapaxes(0, 2).swapaxes(1, 2)
+        return image, data
+
+class SegmentationDataset(Dataset):
     def __init__(self, img_dir, annotations_file, cats=None, image_transform=None, coords_transform=None, bg=True, empty_rate=100):
         self.img_dir = img_dir
         self.coco = COCO(os.path.join(img_dir, annotations_file))
@@ -89,10 +130,6 @@ class CustomImageDataset(Dataset):
         data["labels"] = torch.tensor(labels, dtype=torch.int64)#torch.ones((num_objs,), dtype=torch.int64)   # there is only one class
         data["masks"] = masks
         return image, data
-
-
-def collate_fn(batch):
-    return tuple(zip(*batch))
 
 
 def collate_fn(batch):

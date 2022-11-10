@@ -27,10 +27,9 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from pycocotools.coco import COCO
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.transforms import ToTensor
 from pprint import pprint
 from torch.utils.tensorboard import SummaryWriter
-from utils import filter_by_threshold, filter_nms, calculate_metrics, convert_to_array, CustomImageDataset, collate_fn
+from utils import filter_by_threshold, filter_nms, calculate_metrics, convert_to_array, SegmentationDataset, collate_fn
 from mean_average_precision import MetricBuilder
 
 DATE = datetime.datetime.now().strftime("%Y%m%d%H%M")
@@ -46,12 +45,12 @@ coords_transform = A.Compose([
     A.Affine(p=0.5),
     A.Flip(p=0.5)
 ])
-train = CustomImageDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json',
+train = SegmentationDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json',
     image_transform=image_transform,
     coords_transform=coords_transform,
     empty_rate=100,
     bg=True)
-valid = CustomImageDataset('Gastro.v1i.coco-segmentation/valid', '_annotations.coco.json', cats=train.cats, bg=True)
+valid = SegmentationDataset('Gastro.v1i.coco-segmentation/valid', '_annotations.coco.json', cats=train.cats, bg=True)
 print("train len", train.__len__())
 print("train cats", train.cats)
 
