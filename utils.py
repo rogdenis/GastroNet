@@ -51,7 +51,7 @@ class ClassificationDataset(Dataset):
         obj = self.indx[idx]
         img_path = os.path.join(self.img_dir, obj[0])
         image = cv2.imread(img_path)#read_image(img_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if self.image_transform:
             transformed = self.image_transform(image=image)
             image = transformed['image']
