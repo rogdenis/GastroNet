@@ -59,7 +59,7 @@ BEST = -1
 
 def objective(trial):
     global BEST
-    train_batch = trial.suggest_int("batch", 1, 8, log=False)
+    train_batch = trial.suggest_int("batch", 8, 64, log=False)
     LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
     WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
     pth = 'classification_log/{}_{}_{}'.format(train_batch, LR, WD)
@@ -68,20 +68,19 @@ def objective(trial):
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch, shuffle=True)
     validloader = torch.utils.data.DataLoader(valid, batch_size=train_batch, shuffle=False)
-    model = resnet50()
+    model = resnet50(num_classes=len(classes))
     model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    for epoch in range(40):  # loop over the dataset multiple times
-        print("Train epoch {}".format(epoch))
+    for epoch in range(50):  # loop over the dataset multiple times
         model.train()
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
             images, labels = data
-            images.to(device)
-            labels.to(device)
+            images = images.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -141,7 +140,7 @@ def objective(trial):
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize",
         pruner=optuna.pruners.PercentilePruner(
-            25.0, n_startup_trials=5, n_warmup_steps=10, interval_steps=5
+            25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
         ))
     study.optimize(objective, n_trials=40)
 

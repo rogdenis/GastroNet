@@ -13,12 +13,11 @@ from torch.utils.data import Dataset
 from collections import Counter
 
 
-coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
-coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
-coco_names.insert(0,"bg")
-
-# this will help us create a different color for each class
-COLORS = np.random.uniform(0, 255, size=(len(coco_names), 3))
+def get_colors():
+    coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
+    coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
+    coco_names.insert(0,"bg")
+    return np.random.uniform(0, 255, size=(len(coco_names), 3)), coco_names
 
 class ClassificationDataset(Dataset):
     def __init__(self, img_dir, annotations_file, image_transform=None, coords_transform=None):
@@ -210,7 +209,7 @@ def calculate_metrics(detections, targets, classes, iou):
     return TP, FP, FN
 
 
-def draw_segmentation_map(image, output):
+def draw_segmentation_map(image, output, COLORS, coco_names):
     alpha = 1 
     beta = 0.3 # transparency for the segmentation map
     gamma = 0 # scalar added to each sum

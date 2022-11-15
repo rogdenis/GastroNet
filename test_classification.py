@@ -57,7 +57,7 @@ classes = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
-model = resnet50()
+model = resnet50(num_classes=len(classes))
 PATH = "classification.pt"
 if len(sys.argv) > 1: PATH = sys.argv[1]
 checkpoint = torch.load(PATH)
