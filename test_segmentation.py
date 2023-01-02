@@ -16,7 +16,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from utils import filter_by_threshold, draw_segmentation_map, filter_nms, calculate_metrics, convert_to_array
+from utils import filter_by_threshold, draw_segmentation_map, filter_nms, calculate_metrics, convert_to_array, get_colors
 from utils import CustomImageDataset, collate_fn
 from torchmetrics import PrecisionRecallCurve
 from torch.utils.tensorboard import SummaryWriter
@@ -61,6 +61,7 @@ writer = SummaryWriter(checkpoint['params'])
 
 i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
+COLORS, coco_names = get_colors()
 for images, targets in test_dataloader:
     #metric = MeanAveragePrecision(class_metrics=True, iou_thresholds = [0.9], rec_thresholds=[0.001])
     frames = tuple(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
@@ -69,8 +70,8 @@ for images, targets in test_dataloader:
         outputs = model(images)
     outputs = filter_nms(outputs)
     filtered_outs = filter_by_threshold(outputs, TH)
-    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0])
-    gt = draw_segmentation_map(frames[0].copy(), targets[0])
+    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0], COLORS, coco_names)
+    gt = draw_segmentation_map(frames[0].copy(), targets[0], COLORS, coco_names)
     image = np.hstack([gt,predict])
     preds, gt = convert_to_array(filtered_outs[0], targets[0])
     TP, FP, FN = calculate_metrics(preds, gt, 6, 0.5)
