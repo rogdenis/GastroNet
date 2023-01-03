@@ -19,29 +19,31 @@ def get_colors():
     coco_names.insert(0,"bg")
     return np.random.uniform(0, 255, size=(len(coco_names), 3)), coco_names
 
+
 class ClassificationDataset(Dataset):
-    def __init__(self, img_dir, annotations_file, image_transform=None, coords_transform=None):
+    def __init__(self, img_dir, annotations_file, classes,
+                seq, type,
+                image_transform=None, coords_transform=None, SEED = "0"):
+        self.NAVIGATION_CLASSES = classes
         self.img_dir = img_dir
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.indx = []
         with open(os.path.join(img_dir, annotations_file)) as f:
-            i = 0
             for line in f:
-                if i > 0:            
-                    tabs = line.strip().split(', ')
-                    fname = tabs[0]
-                    try:
-                        cl = tabs[1:].index('1')
-                    except:
-                        print(tabs)
-                        raise
-                    blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
-                    variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
-                    if blur > 100 or variance > 2500:
-                        self.indx.append((fname, cl))
-
-                i += 1
+                if next(seq) != type:
+                    continue       
+                tabs = line.strip().split(',')
+                fname = tabs[0]
+                try:
+                    cl = self.NAVIGATION_CLASSES.index(tabs[1])
+                except:
+                    print(tabs)
+                    raise
+                blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
+                variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
+                if blur > 100 or variance > 2500:
+                    self.indx.append((fname, cl))
 
     def __len__(self):
         return len(self.indx)

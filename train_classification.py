@@ -1,38 +1,32 @@
 #https://towardsdatascience.com/a-comprehensive-introduction-to-different-types-of-convolutions-in-deep-learning-669281e58215
 import torch
 import torchvision
+import optuna
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import albumentations as A
-import optuna
+from random import choices
+from random import seed
 from optuna.trial import TrialState
 from utils import ClassificationDataset, collate_fn
 from torchvision.models import resnet50
 from torch.utils.tensorboard import SummaryWriter
-#     [transforms.ToTensor(),
-#      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 7, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(7, 16, 5)
-        self.fc1 = nn.Linear(16 * 101 * 101, 120)
-        self.fc2 = nn.Linear(120, 20)
-        self.fc3 = nn.Linear(20, 9)
+population = ["train", "valid", "test"]
+weights = [0.7, 0.2, 0.1]
+seed(0)
+seq = iter(choices(population, weights, k=1000))
 
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        #print(x.size())
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+classes = [
+    'Antrum pyloricum',
+    'Corpus gastricum',
+    'Duodenum',
+    'Esophagus',
+    'Mouth',
+    'Oropharynx',
+    'Void']
 
 image_transform = A.Compose([
     A.MotionBlur(p=0.5),
@@ -44,16 +38,21 @@ coords_transform = A.Compose([
     A.Flip(p=0.5)
 ])
 
-trainset = ClassificationDataset('classification/train', '_classes.csv',
+trainset = ClassificationDataset('classification20230104', '_classes.csv', classes,
+    seq, "train",
     image_transform=image_transform,
     coords_transform=coords_transform,
 )
-valid = ClassificationDataset('classification/valid', '_classes.csv',
+
+valid = ClassificationDataset('classification20230104', '_classes.csv', classes,
+    seq, "valid",
     image_transform=None,
     coords_transform=None,
 )
 
-classes = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum', 'Esophagus III/III', 'Mouth', 'Oesophagus', 'Oropharynx', 'Pars cardiaca')
+print(len(trainset))
+print(len(valid))
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 BEST = -1
 
