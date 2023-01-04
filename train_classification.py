@@ -137,26 +137,27 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    study = optuna.create_study(direction="maximize",
-        pruner=optuna.pruners.PercentilePruner(
-            25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
-        ))
-    study.optimize(objective, n_trials=40)
+    pass
+    # study = optuna.create_study(direction="maximize",
+    #     pruner=optuna.pruners.PercentilePruner(
+    #         25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
+    #     ))
+    # study.optimize(objective, n_trials=40)
 
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    # pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    # complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-    with open('opimization.txt',"w") as f:
-        f.write("Study statistics:\n")
-        f.write("  Number of finished trials:{}".format(len(study.trials)))
-        f.write("  Number of pruned trials:{}".format(len(pruned_trials)))
-        f.write("  Number of complete trials:{}".format(len(complete_trials)))
+    # with open('opimization.txt',"w") as f:
+    #     f.write("Study statistics:\n")
+    #     f.write("  Number of finished trials:{}".format(len(study.trials)))
+    #     f.write("  Number of pruned trials:{}".format(len(pruned_trials)))
+    #     f.write("  Number of complete trials:{}".format(len(complete_trials)))
 
-        f.write("Best trial:\n")
-        trial = study.best_trial
+    #     f.write("Best trial:\n")
+    #     trial = study.best_trial
 
-        f.write("  Value:{}".format(trial.value))
+    #     f.write("  Value:{}".format(trial.value))
 
-        f.write("  Params: \n")
-        for key, value in trial.params.items():
-            f.write("    {}: {}".format(key, value))
+    #     f.write("  Params: \n")
+    #     for key, value in trial.params.items():
+    #         f.write("    {}: {}".format(key, value))
