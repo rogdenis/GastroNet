@@ -19,8 +19,6 @@ from torchvision.models import resnet50
 
 VIDEO_NAME = sys.argv[1]
 TH = float(sys.argv[2])
-CLASSES = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum', 'Esophagus III/III', 'Mouth', 'Oesophagus', 'Oropharynx', 'Pars cardiaca')
-
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 
 PATH = "best.pt"
@@ -38,31 +36,38 @@ segmentation_model.load_state_dict(checkpoint['model_state_dict'])
 segmentation_model.to(device)# move model to the right devic
 segmentation_model.eval()
 
+classes = [
+    'Antrum pyloricum',
+    'Corpus gastricum',
+    'Duodenum',
+    'Esophagus',
+    'Mouth',
+    'Oropharynx',
+    'Void']
+
 #LOAD CLASSIFICATION MODEL
-PATH = "classification.pt"
+PATH = "classification20220103.pt"
 if len(sys.argv) > 4: PATH = sys.argv[4]
 checkpoint = torch.load(PATH)
-classification_model = resnet50(num_classes=len(CLASSES))
+classification_model = resnet50(num_classes=len(classes))
 classification_model.load_state_dict(checkpoint['model_state_dict'])
 classification_model.to(device)# move model to the right devic
 classification_model.eval()
 
-CLASSES = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum', 'Esophagus III/III', 'Mouth', 'Oesophagus', 'Oropharynx', 'Pars cardiaca')
-SCORES = [0] * len(CLASSES)
+
+SCORES = [0] * len(classes)
 A = 0.2
 def drawClassification(frame, prediction):
     prediction = prediction.cpu().numpy().tolist()
     ps = max(prediction)
-    pc = CLASSES[prediction.index(ps)]
+    pc = classes[prediction.index(ps)]
     for i in range(len(SCORES)):
         SCORES[i] = A * prediction[i] + (1-A) * SCORES[i]
     s = max(SCORES)
-    c = CLASSES[SCORES.index(s)]
-    if c == 'Oropharynx': c = 'Oesophagus'
-    elif c == 'Oesophagus': c = 'Oropharynx'
-    text = "{}: {}".format(c, round(s,3))
+    c = classes[SCORES.index(s)]
+    text = "smoothed: {}: {}".format(c, round(s,3))
     frame = cv2.putText(frame, text, (10,30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    text = "{}: {}".format(pc, round(ps,3))
+    text = "raw: {}: {}".format(pc, round(ps,3))
     pred_color = (255, 255, 255)
     if pc != c:
         pred_color = (0, 0, 255)
@@ -94,7 +99,7 @@ def getFrames(segmentation_model, classification_model):
             detections = filter_nms(detections)
             detections = filter_by_threshold(detections, TH)
             classification = classification_model(image)
-            classification = softmax(classification_model(image)[0][:len(CLASSES)])
+            classification = softmax(classification_model(image)[0][:len(classes)])
         predict = draw_segmentation_map(frame, detections[0], COLORS, coco_names)
         predict = drawClassification(predict, classification)
         result = np.hstack([orig_frame,predict])
