@@ -109,7 +109,7 @@ def objective(trial):
             loss_dict = model(images, targets)
             losses = sum(loss for loss in loss_dict.values())
             #writer.add_scalars('training-loss_parts', loss_dict, epoch * len(train_dataloader) + i)
-            writer.add_scalar('training-loss', losses, epoch * len(train_dataloader) + i)
+            writer.add_scalar('training-loss', losses * 1.0 / train_batch, epoch * len(train_dataloader) + i)
             losses.backward()
             optimizer.step()
             i += 1
@@ -155,7 +155,7 @@ def objective(trial):
 
         if mAP > BEST:
             BEST = mAP
-            torch.save(checkpoint, "best.pt".format(pth.replace("/","")))
+            torch.save(checkpoint, "best_segmentation.pt".format(pth.replace("/","")))
 
         lr_scheduler.step()
 
