@@ -11,6 +11,7 @@ from pycocotools.coco import COCO
 from torchvision.io import read_image
 from torch.utils.data import Dataset
 from collections import Counter
+from mean_average_precision import MetricBuilder
 
 
 def get_colors(coco_dir, annotation_file):
@@ -97,10 +98,8 @@ class SegmentationDataset(Dataset):
         ann_ids = self.coco.getAnnIds(imgIds=idx)
         num_objs = len(ann_ids)
         img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
-        print(img_path)
         image = cv2.imread(img_path)#read_image(img_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        print(image.shape)
         if self.image_transform:
             transformed = self.image_transform(image=image)
             image = transformed['image']
@@ -114,7 +113,6 @@ class SegmentationDataset(Dataset):
             masks = [bg]
             labels = [0]
             boxes[0] = torch.tensor([0, 0, image.shape[1], image.shape[0]])
-            print(boxes[0])
         for ann_id in ann_ids:
             ann = self.coco.loadAnns(ann_id)
             mask = self.coco.annToMask(ann[0])
@@ -128,7 +126,6 @@ class SegmentationDataset(Dataset):
         for i in range(int(self.bg), num_objs):
             x,y,w,h = cv2.boundingRect(masks[i])
             boxes[i] = torch.tensor([x, y, x+w, y+h])
-            print(boxes[i])
         masks = torch.as_tensor(masks, dtype=torch.float32)
         image = torch.as_tensor(image, dtype=torch.float32).swapaxes(0, 2).swapaxes(1, 2)
         data = {}

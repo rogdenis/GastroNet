@@ -42,7 +42,7 @@ image_transform = A.Compose([
 ])
 
 coords_transform = A.Compose([
-    A.Affine(p=0.5),
+    A.Affine(shear=(-5, 5), p=0.5),
     A.Flip(p=0.5)
 ])
 train = SegmentationDataset('dataset', 'annotations_coco.json',
@@ -59,7 +59,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 def objective(trial):
     global BEST
     val_batch = 1
-    train_batch = trial.suggest_int("batch", 1, 1, log=False)
+    train_batch = trial.suggest_int("batch", 8, 8, log=False)
     LR = trial.suggest_float("lr", 3e-5, 3e-5, log=True)#0.0001
     WD = trial.suggest_float("WD", 3e-5, 3e-5, log=False)#0.001
     ER = 100
@@ -70,7 +70,7 @@ def objective(trial):
     model.to(device)
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                    step_size=10,
+                                                    step_size=20,
                                                     gamma=0.1)
     train_dataloader = DataLoader(train, batch_size=train_batch,
     shuffle=False,
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         pruner=optuna.pruners.PercentilePruner(
             25.0, n_startup_trials=5, n_warmup_steps=10, interval_steps=5
         ))
-    study.optimize(objective, n_trials=40)
+    study.optimize(objective, n_trials=1)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
