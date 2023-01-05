@@ -24,8 +24,8 @@ from pprint import pprint
 torch.manual_seed(0)
 TH = 0
 
-train = SegmentationDataset('segmentation20230104', 'annotations_coco.json')
-test = SegmentationDataset('segmentation20230104', 'annotations_coco.json',
+train = SegmentationDataset('dataset', 'annotations_coco.json')
+test = SegmentationDataset('dataset', 'annotations_coco.json',
     cats=train.cats,
     bg=False)
 print(train.cats)
@@ -50,7 +50,7 @@ PATH = "epoch_3.pt"
 
 i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
-COLORS, coco_names = get_colors('segmentation20230104', 'annotations_coco.json')
+COLORS, coco_names = get_colors('dataset', 'annotations_coco.json')
 for images, targets in test_dataloader:
     #metric = MeanAveragePrecision(class_metrics=True, iou_thresholds = [0.9], rec_thresholds=[0.001])
     frames = tuple(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)

@@ -59,9 +59,9 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 def objective(trial):
     global BEST
     val_batch = 1
-    train_batch = trial.suggest_int("batch", 1, 8, log=False)
-    LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
-    WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
+    train_batch = trial.suggest_int("batch", 1, 1, log=False)
+    LR = trial.suggest_float("lr", 3e-5, 3e-5, log=True)#0.0001
+    WD = trial.suggest_float("WD", 3e-5, 3e-5, log=False)#0.001
     ER = 100
 
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
@@ -73,7 +73,7 @@ def objective(trial):
                                                     step_size=10,
                                                     gamma=0.1)
     train_dataloader = DataLoader(train, batch_size=train_batch,
-    shuffle=True,
+    shuffle=False,
     collate_fn=collate_fn)
     valid_dataloader = DataLoader(valid, batch_size=val_batch, shuffle=False, collate_fn=collate_fn) 
 
