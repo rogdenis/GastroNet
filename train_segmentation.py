@@ -45,12 +45,12 @@ coords_transform = A.Compose([
     A.Affine(p=0.5),
     A.Flip(p=0.5)
 ])
-train = SegmentationDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json',
+train = SegmentationDataset('dataset', 'annotations_coco.json',
     image_transform=image_transform,
     coords_transform=coords_transform,
     empty_rate=100,
     bg=True)
-valid = SegmentationDataset('Gastro.v1i.coco-segmentation/valid', '_annotations.coco.json', cats=train.cats, bg=True)
+valid = SegmentationDataset('dataset', 'annotations_coco.json', cats=train.cats, bg=True)
 print("train len", train.__len__())
 print("train cats", train.cats)
 
@@ -62,10 +62,7 @@ def objective(trial):
     train_batch = trial.suggest_int("batch", 1, 8, log=False)
     LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
     WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
-    ER = 100#trial.suggest_float("empty_rate", 0, 3, log=False)
-
-    #optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
-    #optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=LR)
+    ER = 100
 
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
     in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
@@ -112,7 +109,7 @@ def objective(trial):
             loss_dict = model(images, targets)
             losses = sum(loss for loss in loss_dict.values())
             #writer.add_scalars('training-loss_parts', loss_dict, epoch * len(train_dataloader) + i)
-            writer.add_scalar('training-loss', losses, epoch * len(train_dataloader) + i)
+            writer.add_scalar('training-loss', losses * 1.0 / train_batch, epoch * len(train_dataloader) + i)
             losses.backward()
             optimizer.step()
             i += 1
@@ -158,7 +155,7 @@ def objective(trial):
 
         if mAP > BEST:
             BEST = mAP
-            torch.save(checkpoint, "best.pt".format(pth.replace("/","")))
+            torch.save(checkpoint, "best_segmentation.pt".format(pth.replace("/","")))
 
         lr_scheduler.step()
 

@@ -13,8 +13,8 @@ from torch.utils.data import Dataset
 from collections import Counter
 
 
-def get_colors():
-    coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
+def get_colors(coco_dir, annotation_file):
+    coco = COCO(os.path.join(coco_dir, annotation_file))
     coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
     coco_names.insert(0,"bg")
     return np.random.uniform(0, 255, size=(len(coco_names), 3)), coco_names
@@ -75,24 +75,25 @@ class SegmentationDataset(Dataset):
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.bg = bg
-        self.balanced_index = []
-        empty = []
-        for idx in range(len(self.coco.getImgIds())):
-            if len(self.coco.getAnnIds(imgIds=idx)) > 0:
-                self.balanced_index.append(idx)
-            else:
-                empty.append(idx)
-        K = int(min(len(empty), len(self.balanced_index) * empty_rate))
-        indices = random.sample(range(len(empty)), K)
-        self.balanced_index += [empty[i] for i in sorted(indices)]
-        random.shuffle(self.balanced_index)
-        print("empty", len(indices), "all", len(self.balanced_index))
+        # self.balanced_index = []
+        # empty = []
+        # for idx in range(len(self.coco.getImgIds())):
+        #     print(idx)
+        #     if len(self.coco.getAnnIds(imgIds=idx)) > 0:
+        #         self.balanced_index.append(idx)
+        #     else:
+        #         empty.append(idx)
+        # K = int(min(len(empty), len(self.balanced_index) * empty_rate))
+        # indices = random.sample(range(len(empty)), K)
+        # self.balanced_index += [empty[i] for i in sorted(indices)]
+        # random.shuffle(self.balanced_index)
+        # print("empty", len(indices), "all", len(self.balanced_index))
 
     def __len__(self):
-        return len(self.balanced_index)
+        return len(self.coco.getImgIds())
 
     def __getitem__(self, idx):
-        idx = self.balanced_index[idx]
+        #idx = self.balanced_index[idx]
         ann_ids = self.coco.getAnnIds(imgIds=idx)
         num_objs = len(ann_ids)
         img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
