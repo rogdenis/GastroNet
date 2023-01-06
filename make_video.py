@@ -14,24 +14,24 @@ import torchvision.models.segmentation
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from utils import draw_segmentation_map, filter_by_threshold, filter_nms, get_colors
+from utils import draw_segmentation_map, filter_by_threshold, filter_nms, get_colors, SegmentationDataset
 from torchvision.models import resnet50
 
 VIDEO_NAME = sys.argv[1]
 TH = float(sys.argv[2])
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 
-PATH = "best.pt"
-if len(sys.argv) > 3: PATH = sys.argv[3]
-checkpoint = torch.load(PATH)
+
+train = SegmentationDataset('dataset', 'annotations_coco.json')
+print(train.cats)
 
 #LOAD SEGMENTATION MODEL
-PATH = "best.pt"
+PATH = "best_segmentation.pt"
 if len(sys.argv) > 3: PATH = sys.argv[3]
 checkpoint = torch.load(PATH)
 segmentation_model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = segmentation_model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
-segmentation_model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
+segmentation_model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=1+len(train.cats))  # replace the pre-trained head with a new one
 segmentation_model.load_state_dict(checkpoint['model_state_dict'])
 segmentation_model.to(device)# move model to the right devic
 segmentation_model.eval()
@@ -76,7 +76,7 @@ def drawClassification(frame, prediction):
 
 
 def getFrames(segmentation_model, classification_model):
-    COLORS, coco_names = get_colors()
+    COLORS, coco_names = get_colors('dataset', 'annotations_coco.json')
     session = requests.Session()
     retries = Retry(total=5, backoff_factor=1)
     session.mount('http://', HTTPAdapter(max_retries=retries))

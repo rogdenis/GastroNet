@@ -59,9 +59,10 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 def objective(trial):
     global BEST
     val_batch = 1
-    train_batch = trial.suggest_int("batch", 8, 8, log=False)
-    LR = trial.suggest_float("lr", 3e-5, 3e-5, log=True)#0.0001
-    WD = trial.suggest_float("WD", 3e-5, 3e-5, log=False)#0.001
+    #tb4_vb1_lr0.00014_wd0.00055_er100
+    train_batch = trial.suggest_int("batch", 4, 4, log=False)
+    LR = trial.suggest_float("lr", 0.00014, 0.00014, log=True)#0.0001
+    WD = trial.suggest_float("WD", 0.00055, 0.00055, log=False)#0.001
     ER = 100
 
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
@@ -73,7 +74,7 @@ def objective(trial):
                                                     step_size=20,
                                                     gamma=0.1)
     train_dataloader = DataLoader(train, batch_size=train_batch,
-    shuffle=False,
+    shuffle=True,
     collate_fn=collate_fn)
     valid_dataloader = DataLoader(valid, batch_size=val_batch, shuffle=False, collate_fn=collate_fn) 
 
@@ -98,7 +99,7 @@ def objective(trial):
         start_epoch = checkpoint['epoch'] + 1
         BEST = checkpoint['metric']
 
-    for epoch in range(start_epoch, 30):
+    for epoch in range(start_epoch, 100):
         model.train()
         i = 0
         for images, targets in train_dataloader:
@@ -119,7 +120,7 @@ def objective(trial):
         #VALIDATE
         #model.eval()
         main_metric = 0
-        metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=6)
+        metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=1+len(train.cats))
         losses = 0
         with torch.no_grad():
             for images, targets in valid_dataloader:
@@ -167,8 +168,8 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize",
-        pruner=optuna.pruners.PercentilePruner(
-            25.0, n_startup_trials=5, n_warmup_steps=10, interval_steps=5
+        pruner=optuna.pruners.ThresholdPruner(
+            lower=1e-3, n_warmup_steps=5, interval_steps=5
         ))
     study.optimize(objective, n_trials=1)
 

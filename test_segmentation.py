@@ -22,7 +22,7 @@ from torchmetrics import PrecisionRecallCurve
 from torch.utils.tensorboard import SummaryWriter
 from pprint import pprint
 torch.manual_seed(0)
-TH = 0.7
+TH = 0
 
 image_transform = A.Compose([
     A.MotionBlur(p=0.5),
@@ -62,18 +62,19 @@ i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
 COLORS, coco_names = get_colors('dataset', 'annotations_coco.json')
 for images, targets in test_dataloader:
+    i += 1
     #metric = MeanAveragePrecision(class_metrics=True, iou_thresholds = [0.9], rec_thresholds=[0.001])
-    frames = tuple(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
+    frames = tuple(cv2.cvtColor(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1), cv2.COLOR_BGR2RGB) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
     images = list(image.to(device) for image in images)
     with torch.no_grad():
         outputs = model(images)
     outputs = filter_nms(outputs)
     filtered_outs = filter_by_threshold(outputs, TH)
-    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0], COLORS, coco_names)
     gt = draw_segmentation_map(frames[0].copy(), targets[0], COLORS, coco_names)
+    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0], COLORS, coco_names)
     image = np.hstack([gt,predict])
     preds, gt = convert_to_array(filtered_outs[0], targets[0])
-    TP, FP, FN = calculate_metrics(preds, gt, 6, 0.5)
+    TP, FP, FN = calculate_metrics(preds, gt, 1+len(train.cats), 0.5)
     precision = TP / (TP + FP) if TP + FP > 0 else 0
     recall = TP / (TP + FN) if TP + FN > 0 else 0
     text = "PR: {:.2f}, RE: {:.2f}".format(precision, recall)
@@ -87,13 +88,11 @@ for images, targets in test_dataloader:
         filtered_outs = filter_by_threshold(outputs, float(th))
         preds, gt = convert_to_array(filtered_outs[0], targets[0])
         #print(gt)
-        TP, FP, FN = calculate_metrics(preds, gt, 6, 0.5)
+        TP, FP, FN = calculate_metrics(preds, gt, 1+len(train.cats), 0.5)
         vals["TP"] += TP
         vals["FP"] += FP
         vals["FN"] += FN
     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-    
-    i += 1
 
 i = 0
 for th, vals in GL.items():
