@@ -4,9 +4,10 @@ import shutil
 import sys
 import cv2
 import os
+from random import random
 from requests.auth import HTTPBasicAuth
 
-DATASETDIR = "dataset"
+DATASETDIR = "dataset20230116"
 
 PATHOLOGIES = [
     "Kartsenoma cords",
@@ -27,6 +28,16 @@ PATHOLOGIES = [
     "Uncer"
 ]
 
+PARTS = {
+    "Antrum pyloricum": 122/329,
+    "Corpus gastricum": 1,
+    "Duodenum": 30/329,
+    "Esophagus": 106/329,
+    "Mouth": 12/329,
+    "Oropharynx": 32/329,
+    "Void": 49/329
+}
+
 def download_file(url, local_filename):
     with requests.get(url, stream=True) as r:
         with open(local_filename, 'wb') as f:
@@ -34,12 +45,14 @@ def download_file(url, local_filename):
     return local_filename
 
 
-def extract_frame(vidcap, start, end, label, task_id, freq = 25):
+def extract_frame(vidcap, start, end, label, task_id, freq = 0.05):
     success, image = vidcap.read()
     count = start
     images_to_labels = []
+    prob = min(1, freq * 1.0 / PARTS[label])
+    #print(label, prob)
     while success and count < end:
-        if count % freq == 0:
+        if random() < prob:
             filename = "{}_{}.png".format(task_id, count)
             path = os.path.join(DATASETDIR, filename)
             cv2.imwrite(path, image)
@@ -78,7 +91,7 @@ def create_coco(pathologies):
 # response = requests.request("GET", url, headers=headers, auth=auth)
 #download batch_file
 
-URL = 'https://storage.yandexcloud.net/cvproject/labeled_scale_2.json'
+URL = 'https://storage.yandexcloud.net/cvproject/tasks_fixed.json'
 r = requests.get(URL)
 data = r.json()
 
@@ -107,20 +120,26 @@ for video in data:
     events = r.json()
     start = 0
     label = "Void"
-    classes = set()
+    label_ranged = False
     vidcap = cv2.VideoCapture(videofilename)
     for event in events:
         if event["label"] == "Pathologie":
             continue
-        classes.add(event["label"])
-        print("{} from {} until {}".format(label, start, event["start"]))
-        start, images_to_labels = extract_frame(vidcap, start, event["start"], label, task_id)
-        NAVIGATION += images_to_labels
+        #print(event)
+        if not label_ranged:
+            print("{} from {} until {}".format(label, start, event["start"]))
+            start, end = start, event["start"]
+            start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
+            NAVIGATION += images_to_labels
         label = event["label"]
         if event["type"] == "range":
-            print("{} from {} until {}".format(label, start, event["end"]))
-            start, images_to_labels = extract_frame(vidcap, start, event["end"], label, task_id)
-            NAVIGATION += images_to_labels
+            print("{} from {} until {}".format(label, event["start"], event["end"]))
+            start, end = event["start"], event["end"]
+            start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
+            label_ranged = True
+        else:
+            label_ranged = False
+        NAVIGATION += images_to_labels
     
     #segmentation
     r = requests.get(response['annotations']['url'])
