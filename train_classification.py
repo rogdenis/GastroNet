@@ -14,10 +14,10 @@ from utils import ClassificationDataset, collate_fn
 from torchvision.models import resnet50
 from torch.utils.tensorboard import SummaryWriter
 
-population = ["train", "valid", "test"]
-weights = [0.7, 0.2, 0.1]
+population = ["train", "valid"]
+weights = [0.8, 0.2]
 seed(0)
-seq = iter(choices(population, weights, k=1000))
+seq = iter(choices(population, weights, k=10 ** 5))
 
 classes = [
     'Antrum pyloricum',
@@ -58,10 +58,12 @@ BEST = -1
 
 def objective(trial):
     global BEST
-    train_batch = trial.suggest_int("batch", 8, 64, log=False)
-    LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
-    WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
-    pth = 'classification_log/{}_{}_{}'.format(train_batch, LR, WD)
+#     {'batch': 16, 'lr': 3.41968662651
+# 88484e-05, 'WD': 6.374732293412834e-05}
+    train_batch = trial.suggest_int("batch", 16, 16, log=False)
+    LR = trial.suggest_float("lr", 3.4e-05, 3.4e-05, log=True)#0.0001
+    WD = trial.suggest_float("WD", 6.37e-05, 6.37e-05, log=False)#0.001
+    pth = 'classification_log_2/{}_{}_{}'.format(train_batch, LR, WD)
     print(pth)
     writer = SummaryWriter(pth)
 
@@ -73,7 +75,7 @@ def objective(trial):
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    for epoch in range(50):  # loop over the dataset multiple times
+    for epoch in range(40):  # loop over the dataset multiple times
         model.train()
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):

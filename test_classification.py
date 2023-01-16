@@ -9,6 +9,8 @@ import os
 import base64
 import requests
 import albumentations as A
+from random import choices
+from random import seed
 from requests.adapters import HTTPAdapter, Retry
 from time import sleep
 from copy import copy
@@ -40,25 +42,29 @@ session = requests.Session()
 retries = Retry(total=5, backoff_factor=1, status_forcelist=[104, 500, 502, 503, 504] )
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
-image_transform = A.Compose([
-    A.MotionBlur(p=1),
-    A.Defocus(p=1)
-])
+CLASSIFICATION_NET = "classification.pt"
 
-coords_transform = A.Compose([
-    A.Affine(p=1),
-    A.Flip(p=1)
-])
+population = ["train", "valid"]
+weights = [0.8, 0.2]
+seed(0)
+seq = iter(choices(population, weights, k=10 ** 5))
 
-test = ClassificationDataset('classification/test', '_classes.csv')
+classes = [
+    'Antrum pyloricum',
+    'Corpus gastricum',
+    'Duodenum',
+    'Esophagus',
+    'Mouth',
+    'Oropharynx',
+    'Void']
 
-classes = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum', 'Esophagus III/III', 'Mouth', 'Oesophagus', 'Oropharynx', 'Pars cardiaca')
+test = ClassificationDataset('classification20230104', '_classes.csv', classes, seq, "valid")
 
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = resnet50(num_classes=len(classes))
-PATH = "classification.pt"
+PATH = CLASSIFICATION_NET
 if len(sys.argv) > 1: PATH = sys.argv[1]
 checkpoint = torch.load(PATH)
 model.load_state_dict(checkpoint['model_state_dict'])

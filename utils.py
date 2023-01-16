@@ -11,6 +11,7 @@ from pycocotools.coco import COCO
 from torchvision.io import read_image
 from torch.utils.data import Dataset
 from collections import Counter
+from mean_average_precision import MetricBuilder
 
 
 def get_colors(coco_dir, annotation_file):
@@ -164,13 +165,12 @@ def filter_by_threshold(outputs, threshold):
     for output in outputs:
         out = {}
         scores = list(output['scores'].detach().cpu().numpy())
-        thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
-        thresholded_preds_count = len(thresholded_preds_inidices)
-        out['scores'] = output['scores'][thresholded_preds_inidices]
-        masks = (output['masks']>0.6).squeeze().detach().cpu().numpy()
-        out['masks'] = masks[thresholded_preds_inidices]
-        out['boxes'] = output['boxes'][thresholded_preds_inidices]
-        out['labels'] = output['labels'][thresholded_preds_inidices]
+        thresholded_preds_indices = [scores.index(i) for i in scores if i > threshold]
+        out['scores'] = output['scores'][thresholded_preds_indices]
+        masks = output['masks']>0.6
+        out['masks'] = masks[thresholded_preds_indices]
+        out['boxes'] = output['boxes'][thresholded_preds_indices]
+        out['labels'] = output['labels'][thresholded_preds_indices]
         outs.append(out)
     return outs
 
@@ -221,35 +221,33 @@ def draw_segmentation_map(image, output, COLORS, coco_names):
     # print(output['boxes'])
     masks, boxes, labels, scores = output['masks'], output['boxes'], output['labels'], output.get('scores', None)
     for i in range(len(output['masks'])):
-        try:
-            #print(boxes[i])
-            #convert the original PIL image into NumPy format
-            image = np.array(image)
-            red_map = np.zeros_like(masks[i]).astype(np.uint8)
-            green_map = np.zeros_like(masks[i]).astype(np.uint8)
-            blue_map = np.zeros_like(masks[i]).astype(np.uint8)
-            # apply a randon color mask to each object
-            color = COLORS[random.randrange(0, len(COLORS))]
-            red_map[masks[i] == 1], green_map[masks[i] == 1], blue_map[masks[i] == 1]  = color
-            # combine all the masks into a single image
-            segmentation_map = np.stack([red_map, green_map, blue_map], axis=2)
-            # convert from RGN to OpenCV BGR format
-            #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            # apply mask on the image
-            image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
-            # draw the bounding boxes around the objects
-            boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
-            image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
-                                thickness=2)
-            # get the classes labels
-            if scores is not None:
-                label = "{:.2f}: {}".format(scores[i], coco_names[output['labels'][i]])
-            else:
-                label = coco_names[output['labels'][i]]
-            # # put the label text above the objects
-            image = cv2.putText(image , label, (boxes[i][0][0], boxes[i][0][1]+30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
-                        thickness=2, lineType=cv2.LINE_AA)
-        except:
-            pass
+        #print(boxes[i])
+        #convert the original PIL image into NumPy format
+        image = np.array(image)
+        mask = masks[i].squeeze().detach().cpu().numpy()
+        red_map = np.zeros_like(mask).astype(np.uint8)
+        green_map = np.zeros_like(mask).astype(np.uint8)
+        blue_map = np.zeros_like(mask).astype(np.uint8)
+        # apply a randon color mask to each object
+        color = COLORS[random.randrange(0, len(COLORS))]
+        red_map[mask == 1], green_map[mask == 1], blue_map[mask == 1] = color
+        # combine all the masks into a single image
+        segmentation_map = np.stack([red_map, green_map, blue_map], axis=2)
+        # convert from RGN to OpenCV BGR format
+        #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        # apply mask on the image
+        image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
+        # draw the bounding boxes around the objects
+        boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
+        image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
+                            thickness=2)
+        # get the classes labels
+        if scores is not None:
+            label = "{:.2f}: {}".format(scores[i], coco_names[output['labels'][i]])
+        else:
+            label = coco_names[output['labels'][i]]
+        # # put the label text above the objects
+        image = cv2.putText(image , label, (boxes[i][0][0], boxes[i][0][1]+30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
+                    thickness=2, lineType=cv2.LINE_AA)
     return image
