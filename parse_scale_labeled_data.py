@@ -4,10 +4,13 @@ import shutil
 import sys
 import cv2
 import os
-from random import random
+from PIL import Image
+from collections import Counter
+from imagehash import colorhash
+#from random import random
 from requests.auth import HTTPBasicAuth
 
-DATASETDIR = "dataset20230116"
+DATASETDIR = "dataset20230117"
 
 PATHOLOGIES = [
     "Kartsenoma cords",
@@ -38,6 +41,8 @@ PARTS = {
     "Void": 49/329
 }
 
+hash_stat = set()
+
 def download_file(url, local_filename):
     with requests.get(url, stream=True) as r:
         with open(local_filename, 'wb') as f:
@@ -45,19 +50,24 @@ def download_file(url, local_filename):
     return local_filename
 
 
-def extract_frame(vidcap, start, end, label, task_id, freq = 0.05):
+def extract_frame(vidcap, start, end, label, task_id, freq = 10):
+    last_hash = None
     success, image = vidcap.read()
+    img_hash = colorhash(Image.fromarray(image), binbits=7)
     count = start
     images_to_labels = []
-    prob = min(1, freq * 1.0 / PARTS[label])
+    prob = freq * PARTS[label]
     #print(label, prob)
     while success and count < end:
-        if random() < prob:
+        if last_hash is None or (img_hash - last_hash > prob * 5 and img_hash not in hash_stat):
             filename = "{}_{}.png".format(task_id, count)
             path = os.path.join(DATASETDIR, filename)
             cv2.imwrite(path, image)
             images_to_labels.append(','.join((filename, label)))
+            last_hash = img_hash
+        hash_stat.add(str(img_hash))
         success, image = vidcap.read()
+        img_hash = colorhash(Image.fromarray(image), binbits=7)
         count += 1
     return count, images_to_labels
 
@@ -127,13 +137,13 @@ for video in data:
             continue
         #print(event)
         if not label_ranged:
-            print("{} from {} until {}".format(label, start, event["start"]))
+            #print("{} from {} until {}".format(label, start, event["start"]))
             start, end = start, event["start"]
             start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
             NAVIGATION += images_to_labels
         label = event["label"]
         if event["type"] == "range":
-            print("{} from {} until {}".format(label, event["start"], event["end"]))
+            #print("{} from {} until {}".format(label, event["start"], event["end"]))
             start, end = event["start"], event["end"]
             start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
             label_ranged = True
@@ -169,5 +179,3 @@ with open(os.path.join(DATASETDIR,"annotations_coco.json"),"w") as f:
     f.write(json.dumps(COCO, indent = 4))
 with open(os.path.join(DATASETDIR,"navigation.csv"),"w") as f:
     f.write('\n'.join(NAVIGATION))
-# print("navigation classes:")
-# print(sorted(list(classes)))

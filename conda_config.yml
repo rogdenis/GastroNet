@@ -79,4 +79,5 @@ dependencies:
     - torchmetrics
     - tensorboard
     - mean-average-precision
+    - ImageHash
 prefix: /home/rogdenis/miniconda/envs/maskRcnn
