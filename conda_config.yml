@@ -80,4 +80,5 @@ dependencies:
     - tensorboard
     - mean-average-precision
     - ImageHash
+    - boto3
 prefix: /home/rogdenis/miniconda/envs/maskRcnn
