@@ -58,7 +58,7 @@ classes = [
     'Oropharynx',
     'Void']
 
-test = ClassificationDataset('classification20230104', '_classes.csv', classes, seq, "valid")
+test = ClassificationDataset('dataset20230117', 'navigation.csv', classes, seq, "valid")
 
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False)
 

@@ -38,13 +38,13 @@ coords_transform = A.Compose([
     A.Flip(p=0.5)
 ])
 
-trainset = ClassificationDataset('classification20230104', '_classes.csv', classes,
+trainset = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
     seq, "train",
     image_transform=image_transform,
     coords_transform=coords_transform,
 )
 
-valid = ClassificationDataset('classification20230104', '_classes.csv', classes,
+valid = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
     seq, "valid",
     image_transform=None,
     coords_transform=None,
@@ -63,7 +63,7 @@ def objective(trial):
     train_batch = trial.suggest_int("batch", 16, 16, log=False)
     LR = trial.suggest_float("lr", 3.4e-05, 3.4e-05, log=True)#0.0001
     WD = trial.suggest_float("WD", 6.37e-05, 6.37e-05, log=False)#0.001
-    pth = 'classification_log_2/{}_{}_{}'.format(train_batch, LR, WD)
+    pth = 'classification_20230117/{}_{}_{}'.format(train_batch, LR, WD)
     print(pth)
     writer = SummaryWriter(pth)
 
@@ -139,27 +139,26 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    pass
-    # study = optuna.create_study(direction="maximize",
-    #     pruner=optuna.pruners.PercentilePruner(
-    #         25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
-    #     ))
-    # study.optimize(objective, n_trials=40)
+    study = optuna.create_study(direction="maximize",
+        pruner=optuna.pruners.PercentilePruner(
+            25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
+        ))
+    study.optimize(objective, n_trials=1)
 
-    # pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    # complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-    # with open('opimization.txt',"w") as f:
-    #     f.write("Study statistics:\n")
-    #     f.write("  Number of finished trials:{}".format(len(study.trials)))
-    #     f.write("  Number of pruned trials:{}".format(len(pruned_trials)))
-    #     f.write("  Number of complete trials:{}".format(len(complete_trials)))
+    with open('opimization.txt',"w") as f:
+        f.write("Study statistics:\n")
+        f.write("  Number of finished trials:{}".format(len(study.trials)))
+        f.write("  Number of pruned trials:{}".format(len(pruned_trials)))
+        f.write("  Number of complete trials:{}".format(len(complete_trials)))
 
-    #     f.write("Best trial:\n")
-    #     trial = study.best_trial
+        f.write("Best trial:\n")
+        trial = study.best_trial
 
-    #     f.write("  Value:{}".format(trial.value))
+        f.write("  Value:{}".format(trial.value))
 
-    #     f.write("  Params: \n")
-    #     for key, value in trial.params.items():
-    #         f.write("    {}: {}".format(key, value))
+        f.write("  Params: \n")
+        for key, value in trial.params.items():
+            f.write("    {}: {}".format(key, value))

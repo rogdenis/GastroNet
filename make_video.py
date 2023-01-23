@@ -46,7 +46,7 @@ classes = [
     'Void']
 
 #LOAD CLASSIFICATION MODEL
-PATH = "classification20220103.pt"
+PATH = "classification.pt"
 if len(sys.argv) > 4: PATH = sys.argv[4]
 checkpoint = torch.load(PATH)
 classification_model = resnet50(num_classes=len(classes))
@@ -99,7 +99,9 @@ def getFrames(segmentation_model, classification_model):
             detections = filter_nms(detections)
             detections = filter_by_threshold(detections, TH)
             classification = classification_model(image)
-            classification = softmax(classification_model(image)[0][:len(classes)])
+            #classification = softmax(classification_model(image)[0][:len(classes)])
+            classification = classification_model(image)[0][:len(classes)]
+            print(classification)
         predict = draw_segmentation_map(frame, detections[0], COLORS, coco_names)
         predict = drawClassification(predict, classification)
         result = np.hstack([orig_frame,predict])
