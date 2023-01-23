@@ -11,37 +11,40 @@ from pycocotools.coco import COCO
 from torchvision.io import read_image
 from torch.utils.data import Dataset
 from collections import Counter
+from mean_average_precision import MetricBuilder
 
 
-def get_colors():
-    coco = COCO(os.path.join('/home/rogdenis/GastroNet/Gastro.v1i.coco-segmentation/train','_annotations.coco.json'))
+def get_colors(coco_dir, annotation_file):
+    coco = COCO(os.path.join(coco_dir, annotation_file))
     coco_names = [cat['name'] for cat in coco.loadCats(coco.getCatIds())]
     coco_names.insert(0,"bg")
     return np.random.uniform(0, 255, size=(len(coco_names), 3)), coco_names
 
+
 class ClassificationDataset(Dataset):
-    def __init__(self, img_dir, annotations_file, image_transform=None, coords_transform=None):
+    def __init__(self, img_dir, annotations_file, classes,
+                seq, type,
+                image_transform=None, coords_transform=None, SEED = "0"):
+        self.NAVIGATION_CLASSES = classes
         self.img_dir = img_dir
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.indx = []
         with open(os.path.join(img_dir, annotations_file)) as f:
-            i = 0
             for line in f:
-                if i > 0:            
-                    tabs = line.strip().split(', ')
-                    fname = tabs[0]
-                    try:
-                        cl = tabs[1:].index('1')
-                    except:
-                        print(tabs)
-                        raise
-                    blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
-                    variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
-                    if blur > 100 or variance > 2500:
-                        self.indx.append((fname, cl))
-
-                i += 1
+                if next(seq) != type:
+                    continue       
+                tabs = line.strip().split(',')
+                fname = tabs[0]
+                try:
+                    cl = self.NAVIGATION_CLASSES.index(tabs[1])
+                except:
+                    print(tabs)
+                    raise
+                blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
+                variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
+                if blur > 100 or variance > 2500:
+                    self.indx.append((fname, cl))
 
     def __len__(self):
         return len(self.indx)
@@ -73,24 +76,25 @@ class SegmentationDataset(Dataset):
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.bg = bg
-        self.balanced_index = []
-        empty = []
-        for idx in range(len(self.coco.getImgIds())):
-            if len(self.coco.getAnnIds(imgIds=idx)) > 0:
-                self.balanced_index.append(idx)
-            else:
-                empty.append(idx)
-        K = int(min(len(empty), len(self.balanced_index) * empty_rate))
-        indices = random.sample(range(len(empty)), K)
-        self.balanced_index += [empty[i] for i in sorted(indices)]
-        random.shuffle(self.balanced_index)
-        print("empty", len(indices), "all", len(self.balanced_index))
+        # self.balanced_index = []
+        # empty = []
+        # for idx in range(len(self.coco.getImgIds())):
+        #     print(idx)
+        #     if len(self.coco.getAnnIds(imgIds=idx)) > 0:
+        #         self.balanced_index.append(idx)
+        #     else:
+        #         empty.append(idx)
+        # K = int(min(len(empty), len(self.balanced_index) * empty_rate))
+        # indices = random.sample(range(len(empty)), K)
+        # self.balanced_index += [empty[i] for i in sorted(indices)]
+        # random.shuffle(self.balanced_index)
+        # print("empty", len(indices), "all", len(self.balanced_index))
 
     def __len__(self):
-        return len(self.balanced_index)
+        return len(self.coco.getImgIds())
 
     def __getitem__(self, idx):
-        idx = self.balanced_index[idx]
+        #idx = self.balanced_index[idx]
         ann_ids = self.coco.getAnnIds(imgIds=idx)
         num_objs = len(ann_ids)
         img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
@@ -161,13 +165,12 @@ def filter_by_threshold(outputs, threshold):
     for output in outputs:
         out = {}
         scores = list(output['scores'].detach().cpu().numpy())
-        thresholded_preds_inidices = [scores.index(i) for i in scores if i > threshold]
-        thresholded_preds_count = len(thresholded_preds_inidices)
-        out['scores'] = output['scores'][thresholded_preds_inidices]
-        masks = (output['masks']>0.6).squeeze().detach().cpu().numpy()
-        out['masks'] = masks[thresholded_preds_inidices]
-        out['boxes'] = output['boxes'][thresholded_preds_inidices]
-        out['labels'] = output['labels'][thresholded_preds_inidices]
+        thresholded_preds_indices = [scores.index(i) for i in scores if i > threshold]
+        out['scores'] = output['scores'][thresholded_preds_indices]
+        masks = output['masks']>0.6
+        out['masks'] = masks[thresholded_preds_indices]
+        out['boxes'] = output['boxes'][thresholded_preds_indices]
+        out['labels'] = output['labels'][thresholded_preds_indices]
         outs.append(out)
     return outs
 
@@ -218,35 +221,33 @@ def draw_segmentation_map(image, output, COLORS, coco_names):
     # print(output['boxes'])
     masks, boxes, labels, scores = output['masks'], output['boxes'], output['labels'], output.get('scores', None)
     for i in range(len(output['masks'])):
-        try:
-            #print(boxes[i])
-            #convert the original PIL image into NumPy format
-            image = np.array(image)
-            red_map = np.zeros_like(masks[i]).astype(np.uint8)
-            green_map = np.zeros_like(masks[i]).astype(np.uint8)
-            blue_map = np.zeros_like(masks[i]).astype(np.uint8)
-            # apply a randon color mask to each object
-            color = COLORS[random.randrange(0, len(COLORS))]
-            red_map[masks[i] == 1], green_map[masks[i] == 1], blue_map[masks[i] == 1]  = color
-            # combine all the masks into a single image
-            segmentation_map = np.stack([red_map, green_map, blue_map], axis=2)
-            # convert from RGN to OpenCV BGR format
-            #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-            # apply mask on the image
-            image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
-            # draw the bounding boxes around the objects
-            boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
-            image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
-                                thickness=2)
-            # get the classes labels
-            if scores is not None:
-                label = "{:.2f}: {}".format(scores[i], coco_names[output['labels'][i]])
-            else:
-                label = coco_names[output['labels'][i]]
-            # # put the label text above the objects
-            image = cv2.putText(image , label, (boxes[i][0][0], boxes[i][0][1]+30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
-                        thickness=2, lineType=cv2.LINE_AA)
-        except:
-            pass
+        #print(boxes[i])
+        #convert the original PIL image into NumPy format
+        image = np.array(image)
+        mask = masks[i].squeeze().detach().cpu().numpy()
+        red_map = np.zeros_like(mask).astype(np.uint8)
+        green_map = np.zeros_like(mask).astype(np.uint8)
+        blue_map = np.zeros_like(mask).astype(np.uint8)
+        # apply a randon color mask to each object
+        color = COLORS[random.randrange(0, len(COLORS))]
+        red_map[mask == 1], green_map[mask == 1], blue_map[mask == 1] = color
+        # combine all the masks into a single image
+        segmentation_map = np.stack([red_map, green_map, blue_map], axis=2)
+        # convert from RGN to OpenCV BGR format
+        #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        # apply mask on the image
+        image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
+        # draw the bounding boxes around the objects
+        boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
+        image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 
+                            thickness=2)
+        # get the classes labels
+        if scores is not None:
+            label = "{:.2f}: {}".format(scores[i], coco_names[output['labels'][i]])
+        else:
+            label = coco_names[output['labels'][i]]
+        # # put the label text above the objects
+        image = cv2.putText(image , label, (boxes[i][0][0], boxes[i][0][1]+30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, color, 
+                    thickness=2, lineType=cv2.LINE_AA)
     return image

@@ -17,7 +17,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import filter_by_threshold, draw_segmentation_map, filter_nms, calculate_metrics, convert_to_array, get_colors
-from utils import CustomImageDataset, collate_fn
+from utils import SegmentationDataset, collate_fn
 from torchmetrics import PrecisionRecallCurve
 from torch.utils.tensorboard import SummaryWriter
 from pprint import pprint
@@ -25,22 +25,21 @@ torch.manual_seed(0)
 TH = 0
 
 image_transform = A.Compose([
-    A.MotionBlur(p=1),
-    A.Defocus(p=1)
+    A.MotionBlur(p=0.5),
+    A.Defocus(p=0.5)
 ])
 
 coords_transform = A.Compose([
-    A.Affine(p=1),
+    A.Affine(shear=(-5, 5), p=0.5),
     A.Flip(p=1)
 ])
 
-train = CustomImageDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json')
-test = CustomImageDataset('Gastro.v1i.coco-segmentation/test', '_annotations.coco.json',
-    # image_transform=image_transform,
-    # coords_transform=coords_transform,
+train = SegmentationDataset('dataset', 'annotations_coco.json')
+test = SegmentationDataset('dataset', 'annotations_coco.json',
     cats=train.cats,
     bg=False)
 print(train.cats)
+print(len(train))
 
 train_dataloader = DataLoader(train, batch_size=2, shuffle=True, collate_fn=collate_fn)
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False, collate_fn=collate_fn)
@@ -48,8 +47,8 @@ test_dataloader = DataLoader(test, batch_size=1, shuffle=False, collate_fn=colla
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')   # train on the GPU or on the CPU, if a GPU is not available
 model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
 in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
-model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=6)  # replace the pre-trained head with a new one
-PATH = "best.pt"
+model.roi_heads.box_predictor = FastRCNNPredictor(in_features,num_classes=1+len(train.cats))  # replace the pre-trained head with a new one
+PATH = "best_segmentation.pt"
 if len(sys.argv) > 1: PATH = sys.argv[1]
 checkpoint = torch.load(PATH)
 model.load_state_dict(checkpoint['model_state_dict'])
@@ -61,20 +60,21 @@ writer = SummaryWriter(checkpoint['params'])
 
 i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
-COLORS, coco_names = get_colors()
+COLORS, coco_names = get_colors('dataset', 'annotations_coco.json')
 for images, targets in test_dataloader:
+    i += 1
     #metric = MeanAveragePrecision(class_metrics=True, iou_thresholds = [0.9], rec_thresholds=[0.001])
-    frames = tuple(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
+    frames = tuple(cv2.cvtColor(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1), cv2.COLOR_BGR2RGB) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
     images = list(image.to(device) for image in images)
     with torch.no_grad():
         outputs = model(images)
     outputs = filter_nms(outputs)
     filtered_outs = filter_by_threshold(outputs, TH)
-    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0], COLORS, coco_names)
     gt = draw_segmentation_map(frames[0].copy(), targets[0], COLORS, coco_names)
+    predict = draw_segmentation_map(frames[0].copy(), filtered_outs[0], COLORS, coco_names)
     image = np.hstack([gt,predict])
     preds, gt = convert_to_array(filtered_outs[0], targets[0])
-    TP, FP, FN = calculate_metrics(preds, gt, 6, 0.5)
+    TP, FP, FN = calculate_metrics(preds, gt, 1+len(train.cats), 0.5)
     precision = TP / (TP + FP) if TP + FP > 0 else 0
     recall = TP / (TP + FN) if TP + FN > 0 else 0
     text = "PR: {:.2f}, RE: {:.2f}".format(precision, recall)
@@ -88,13 +88,11 @@ for images, targets in test_dataloader:
         filtered_outs = filter_by_threshold(outputs, float(th))
         preds, gt = convert_to_array(filtered_outs[0], targets[0])
         #print(gt)
-        TP, FP, FN = calculate_metrics(preds, gt, 6, 0.5)
+        TP, FP, FN = calculate_metrics(preds, gt, 1+len(train.cats), 0.5)
         vals["TP"] += TP
         vals["FP"] += FP
         vals["FN"] += FN
     targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-    
-    i += 1
 
 i = 0
 for th, vals in GL.items():

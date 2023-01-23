@@ -1,38 +1,32 @@
 #https://towardsdatascience.com/a-comprehensive-introduction-to-different-types-of-convolutions-in-deep-learning-669281e58215
 import torch
 import torchvision
+import optuna
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import albumentations as A
-import optuna
+from random import choices
+from random import seed
 from optuna.trial import TrialState
 from utils import ClassificationDataset, collate_fn
 from torchvision.models import resnet50
 from torch.utils.tensorboard import SummaryWriter
-#     [transforms.ToTensor(),
-#      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-class Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 7, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(7, 16, 5)
-        self.fc1 = nn.Linear(16 * 101 * 101, 120)
-        self.fc2 = nn.Linear(120, 20)
-        self.fc3 = nn.Linear(20, 9)
+population = ["train", "valid"]
+weights = [0.8, 0.2]
+seed(0)
+seq = iter(choices(population, weights, k=10 ** 5))
 
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        #print(x.size())
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+classes = [
+    'Antrum pyloricum',
+    'Corpus gastricum',
+    'Duodenum',
+    'Esophagus',
+    'Mouth',
+    'Oropharynx',
+    'Void']
 
 image_transform = A.Compose([
     A.MotionBlur(p=0.5),
@@ -44,25 +38,32 @@ coords_transform = A.Compose([
     A.Flip(p=0.5)
 ])
 
-trainset = ClassificationDataset('classification/train', '_classes.csv',
+trainset = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
+    seq, "train",
     image_transform=image_transform,
     coords_transform=coords_transform,
 )
-valid = ClassificationDataset('classification/valid', '_classes.csv',
+
+valid = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
+    seq, "valid",
     image_transform=None,
     coords_transform=None,
 )
 
-classes = ('Antrum pyloricum', 'Antrum pyloricun', 'Corpus gastricum', 'Duodenum', 'Esophagus III/III', 'Mouth', 'Oesophagus', 'Oropharynx', 'Pars cardiaca')
+print(len(trainset))
+print(len(valid))
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 BEST = -1
 
 def objective(trial):
     global BEST
-    train_batch = trial.suggest_int("batch", 8, 64, log=False)
-    LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
-    WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
-    pth = 'classification_log/{}_{}_{}'.format(train_batch, LR, WD)
+#     {'batch': 16, 'lr': 3.41968662651
+# 88484e-05, 'WD': 6.374732293412834e-05}
+    train_batch = trial.suggest_int("batch", 16, 16, log=False)
+    LR = trial.suggest_float("lr", 3.4e-05, 3.4e-05, log=True)#0.0001
+    WD = trial.suggest_float("WD", 6.37e-05, 6.37e-05, log=False)#0.001
+    pth = 'classification_20230117/{}_{}_{}'.format(train_batch, LR, WD)
     print(pth)
     writer = SummaryWriter(pth)
 
@@ -74,7 +75,7 @@ def objective(trial):
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    for epoch in range(50):  # loop over the dataset multiple times
+    for epoch in range(40):  # loop over the dataset multiple times
         model.train()
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
@@ -142,7 +143,7 @@ if __name__ == "__main__":
         pruner=optuna.pruners.PercentilePruner(
             25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
         ))
-    study.optimize(objective, n_trials=40)
+    study.optimize(objective, n_trials=1)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])

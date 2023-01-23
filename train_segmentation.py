@@ -42,15 +42,15 @@ image_transform = A.Compose([
 ])
 
 coords_transform = A.Compose([
-    A.Affine(p=0.5),
+    A.Affine(shear=(-5, 5), p=0.5),
     A.Flip(p=0.5)
 ])
-train = SegmentationDataset('Gastro.v1i.coco-segmentation/train', '_annotations.coco.json',
+train = SegmentationDataset('dataset', 'annotations_coco.json',
     image_transform=image_transform,
     coords_transform=coords_transform,
     empty_rate=100,
     bg=True)
-valid = SegmentationDataset('Gastro.v1i.coco-segmentation/valid', '_annotations.coco.json', cats=train.cats, bg=True)
+valid = SegmentationDataset('dataset', 'annotations_coco.json', cats=train.cats, bg=True)
 print("train len", train.__len__())
 print("train cats", train.cats)
 
@@ -59,13 +59,11 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 def objective(trial):
     global BEST
     val_batch = 1
-    train_batch = trial.suggest_int("batch", 1, 8, log=False)
-    LR = trial.suggest_float("lr", 1e-5, 1e-1, log=True)#0.0001
-    WD = trial.suggest_float("WD", 1e-10, 1e-4, log=False)#0.001
-    ER = 100#trial.suggest_float("empty_rate", 0, 3, log=False)
-
-    #optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
-    #optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=LR)
+    #tb4_vb1_lr0.00014_wd0.00055_er100
+    train_batch = trial.suggest_int("batch", 4, 4, log=False)
+    LR = trial.suggest_float("lr", 0.00014, 0.00014, log=True)#0.0001
+    WD = trial.suggest_float("WD", 0.00055, 0.00055, log=False)#0.001
+    ER = 100
 
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
     in_features = model.roi_heads.box_predictor.cls_score.in_features  # get number of input features for the classifier
@@ -73,7 +71,7 @@ def objective(trial):
     model.to(device)
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                    step_size=10,
+                                                    step_size=20,
                                                     gamma=0.1)
     train_dataloader = DataLoader(train, batch_size=train_batch,
     shuffle=True,
@@ -101,7 +99,7 @@ def objective(trial):
         start_epoch = checkpoint['epoch'] + 1
         BEST = checkpoint['metric']
 
-    for epoch in range(start_epoch, 30):
+    for epoch in range(start_epoch, 100):
         model.train()
         i = 0
         for images, targets in train_dataloader:
@@ -112,7 +110,7 @@ def objective(trial):
             loss_dict = model(images, targets)
             losses = sum(loss for loss in loss_dict.values())
             #writer.add_scalars('training-loss_parts', loss_dict, epoch * len(train_dataloader) + i)
-            writer.add_scalar('training-loss', losses, epoch * len(train_dataloader) + i)
+            writer.add_scalar('training-loss', losses * 1.0 / train_batch, epoch * len(train_dataloader) + i)
             losses.backward()
             optimizer.step()
             i += 1
@@ -122,7 +120,7 @@ def objective(trial):
         #VALIDATE
         #model.eval()
         main_metric = 0
-        metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=6)
+        metric_fn = MetricBuilder.build_evaluation_metric("map_2d", async_mode=True, num_classes=1+len(train.cats))
         losses = 0
         with torch.no_grad():
             for images, targets in valid_dataloader:
@@ -158,7 +156,7 @@ def objective(trial):
 
         if mAP > BEST:
             BEST = mAP
-            torch.save(checkpoint, "best.pt".format(pth.replace("/","")))
+            torch.save(checkpoint, "best_segmentation.pt".format(pth.replace("/","")))
 
         lr_scheduler.step()
 
@@ -170,10 +168,10 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize",
-        pruner=optuna.pruners.PercentilePruner(
-            25.0, n_startup_trials=5, n_warmup_steps=10, interval_steps=5
+        pruner=optuna.pruners.ThresholdPruner(
+            lower=1e-3, n_warmup_steps=5, interval_steps=5
         ))
-    study.optimize(objective, n_trials=40)
+    study.optimize(objective, n_trials=1)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
