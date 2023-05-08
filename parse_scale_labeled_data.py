@@ -10,7 +10,9 @@ from imagehash import colorhash
 #from random import random
 from requests.auth import HTTPBasicAuth
 
-DATASETDIR = "dataset20230117"
+DATASETDIR = "dataset202300507"
+if not os.path.isdir(DATASETDIR):
+    os.makedirs(DATASETDIR)
 
 PATHOLOGIES = [
     "Kartsenoma cords",
@@ -100,10 +102,14 @@ def create_coco(pathologies):
 # auth = HTTPBasicAuth('test_a02653c3326a4da9bfabb3fadd61873b', '') # No password
 # response = requests.request("GET", url, headers=headers, auth=auth)
 #download batch_file
+URLS = ['https://storage.yandexcloud.net/cvproject/labeled_data/tasks_20230509.json',
+        'https://storage.yandexcloud.net/cvproject/labeled_data/tasks_20230509_2.json']
+data = []
 
-URL = 'https://storage.yandexcloud.net/cvproject/tasks_fixed.json'
-r = requests.get(URL)
-data = r.json()
+for url in URLS:
+    print(url)
+    r = requests.get(url)
+    data += r.json()
 
 COCO = create_coco(PATHOLOGIES)
 NAVIGATION = []
@@ -114,16 +120,22 @@ for video in data:
     if video.get('completed_at') is None:
         continue
     #download video
-    video_url = video.get('attachmentS3Downloads')[1]['s3URL']
-    videofilename = video['metadata']['filename']
+    if 'originalUrl' in video['metadata']:
+         video_url = video['metadata']['originalUrl']
+         videofilename = video_url.split('/')[-1]
+    else:
+        video_url = video['attachmentS3Downloads'][-1]['s3URL']
+        videofilename = video['metadata']['filename']
     meta = video["metadata"]["video"]
     width = video["metadata"]["video"]["resolution"]["w"]
     height = video["metadata"]["video"]["resolution"]["h"]
     #r = requests.get(video_url)
     print(videofilename)
     if not os.path.isfile(videofilename):
+        print("download video")
         download_file(video_url, videofilename)
-    
+    else:
+        print("video downloaded, skip")
     response = video["response"]
     #navigation
     r = requests.get(response['events']['url'])
@@ -174,6 +186,7 @@ for video in data:
         COCO["annotations"].append(obj)
         annotation_id += 1
     COCO["images"] += extract_frames(vidcap, frames, DATASETDIR, width, height)
+    break
 
 with open(os.path.join(DATASETDIR,"annotations_coco.json"),"w") as f:
     f.write(json.dumps(COCO, indent = 4))
