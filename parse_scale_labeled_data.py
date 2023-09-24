@@ -10,7 +10,7 @@ from imagehash import colorhash
 #from random import random
 from requests.auth import HTTPBasicAuth
 
-DATASETDIR = "dataset202300507"
+DATASETDIR = "dataset20230924"
 if not os.path.isdir(DATASETDIR):
     os.makedirs(DATASETDIR)
 
@@ -102,8 +102,9 @@ def create_coco(pathologies):
 # auth = HTTPBasicAuth('test_a02653c3326a4da9bfabb3fadd61873b', '') # No password
 # response = requests.request("GET", url, headers=headers, auth=auth)
 #download batch_file
-URLS = ['https://storage.yandexcloud.net/cvproject/labeled_data/tasks_20230509.json',
-        'https://storage.yandexcloud.net/cvproject/labeled_data/tasks_20230509_2.json']
+URLS = ['https://storage.yandexcloud.net/cvproject/labeled_data/next_ten_x8mio8.json',
+        'https://storage.yandexcloud.net/cvproject/labeled_data/first10_35gvxn.json',
+        'https://storage.yandexcloud.net/cvproject/labeled_data/colono2.json']
 data = []
 
 for url in URLS:
@@ -133,7 +134,7 @@ for video in data:
     print(videofilename)
     if not os.path.isfile(videofilename):
         print("download video")
-        download_file(video_url, videofilename)
+        #download_file(video_url, videofilename)
     else:
         print("video downloaded, skip")
     response = video["response"]
