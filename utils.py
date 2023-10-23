@@ -33,7 +33,7 @@ class ClassificationDataset(Dataset):
         with open(os.path.join(img_dir, annotations_file)) as f:
             for line in f:
                 if next(seq) != type:
-                    continue       
+                    continue
                 tabs = line.strip().split(',')
                 fname = tabs[0]
                 try:
@@ -41,10 +41,10 @@ class ClassificationDataset(Dataset):
                 except:
                     print(tabs)
                     raise
-                blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
-                variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
-                if blur > 100 or variance > 2500:
-                    self.indx.append((fname, cl))
+                # blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
+                # variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
+                # if blur > 100 or variance > 2500:
+                self.indx.append((fname, cl))
 
     def __len__(self):
         return len(self.indx)
@@ -66,7 +66,9 @@ class ClassificationDataset(Dataset):
         return image, data
 
 class SegmentationDataset(Dataset):
-    def __init__(self, img_dir, annotations_file, cats=None, image_transform=None, coords_transform=None, bg=True, empty_rate=100):
+    def __init__(self, img_dir, annotations_file, cats=None,
+                 image_transform=None, coords_transform=None,
+                 bg=True, seq=None, dtype="train", empty_rate=100):
         self.img_dir = img_dir
         self.coco = COCO(os.path.join(img_dir, annotations_file))
         if cats is None:
@@ -76,6 +78,15 @@ class SegmentationDataset(Dataset):
         self.image_transform = image_transform
         self.coords_transform = coords_transform
         self.bg = bg
+        self.indx = []
+        self.dtype = dtype
+        if seq is not None:
+            for idx in range(len(self.coco.getImgIds())):
+                if next(seq) != dtype:
+                        continue
+                self.indx.append(idx)
+        else:
+            self.indx = list(range(len(self.coco.getImgIds())))
         # self.balanced_index = []
         # empty = []
         # for idx in range(len(self.coco.getImgIds())):
@@ -91,10 +102,11 @@ class SegmentationDataset(Dataset):
         # print("empty", len(indices), "all", len(self.balanced_index))
 
     def __len__(self):
-        return len(self.coco.getImgIds())
+        return len(self.indx)
+        #return len(self.coco.getImgIds())
 
     def __getitem__(self, idx):
-        #idx = self.balanced_index[idx]
+        idx = self.indx[idx]
         ann_ids = self.coco.getAnnIds(imgIds=idx)
         num_objs = len(ann_ids)
         img_path = os.path.join(self.img_dir, self.coco.imgs[idx]['file_name'])
@@ -212,9 +224,9 @@ def calculate_metrics(detections, targets, classes, iou):
     return TP, FP, FN
 
 
-def draw_segmentation_map(image, output, COLORS, coco_names):
+def draw_segmentation_map(image, output, COLORS, coco_names, draw_poly=True):
     alpha = 1 
-    beta = 0.3 # transparency for the segmentation map
+    beta = 0.4 # transparency for the segmentation map
     gamma = 0 # scalar added to each sum
     # print(output['masks'])
     # print(output['labels'])
@@ -236,7 +248,8 @@ def draw_segmentation_map(image, output, COLORS, coco_names):
         # convert from RGN to OpenCV BGR format
         #image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         # apply mask on the image
-        image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
+        if draw_poly:
+            image = cv2.addWeighted(image, alpha, segmentation_map, beta, gamma, image)
         # draw the bounding boxes around the objects
         boxes = [[(int(i[0]), int(i[1])), (int(i[2]), int(i[3]))]  for i in output['boxes'].detach().cpu()]
         image = cv2.rectangle(image, boxes[i][0], boxes[i][1], color=color, 

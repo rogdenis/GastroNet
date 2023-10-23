@@ -20,13 +20,23 @@ seed(0)
 seq = iter(choices(population, weights, k=10 ** 5))
 
 classes = [
-    'Antrum pyloricum',
-    'Corpus gastricum',
-    'Duodenum',
-    'Esophagus',
-    'Mouth',
-    'Oropharynx',
-    'Void']
+        "Mouth",
+        "Oropharynx",
+        "Esophagus",
+        "Corpus gastricum",
+        "Antrum pyloricum",
+        "Duodenum",
+        "Pathologie",
+        "Anus",
+        "Rectum",
+        "Sigmoid colon",
+        "Descending colon",
+        "Left colic flexure",
+        "Transverse colon",
+        "Right colic flexure",
+        "Ascending colon",
+        "Appendix",
+        "Void"]
 
 image_transform = A.Compose([
     A.MotionBlur(p=0.5),
@@ -34,20 +44,25 @@ image_transform = A.Compose([
 ])
 
 coords_transform = A.Compose([
+    A.LongestMaxSize(max_size=800),
     A.Affine(p=0.5),
     A.Flip(p=0.5)
 ])
 
-trainset = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
+image_resize = A.Compose([
+    A.LongestMaxSize(max_size=800)
+])
+
+trainset = ClassificationDataset('dataset20231002', 'navigation.csv', classes,
     seq, "train",
     image_transform=image_transform,
     coords_transform=coords_transform,
 )
 
-valid = ClassificationDataset('dataset20230117', 'navigation.csv', classes,
+valid = ClassificationDataset('dataset20231002', 'navigation.csv', classes,
     seq, "valid",
     image_transform=None,
-    coords_transform=None,
+    coords_transform=image_resize,
 )
 
 print(len(trainset))
@@ -60,10 +75,10 @@ def objective(trial):
     global BEST
 #     {'batch': 16, 'lr': 3.41968662651
 # 88484e-05, 'WD': 6.374732293412834e-05}
-    train_batch = trial.suggest_int("batch", 16, 16, log=False)
-    LR = trial.suggest_float("lr", 3.4e-05, 3.4e-05, log=True)#0.0001
-    WD = trial.suggest_float("WD", 6.37e-05, 6.37e-05, log=False)#0.001
-    pth = 'classification_20230117/{}_{}_{}'.format(train_batch, LR, WD)
+    train_batch = trial.suggest_int("batch", 20, 20, log=False)
+    LR = trial.suggest_float("lr", 1e-05, 1e-04, log=True)#0.0001
+    WD = trial.suggest_float("WD", 1e-05, 2e-04, log=False)#0.001
+    pth = 'classification_20231004/{}_{}_{}'.format(train_batch, LR, WD)
     print(pth)
     writer = SummaryWriter(pth)
 
@@ -75,7 +90,7 @@ def objective(trial):
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=LR, weight_decay = WD)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    for epoch in range(40):  # loop over the dataset multiple times
+    for epoch in range(25):  # loop over the dataset multiple times
         model.train()
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
@@ -131,7 +146,7 @@ def objective(trial):
             'loss': loss,
             'metric': accuracy
             }
-
+        print(epoch, accuracy)
         if accuracy > BEST:
             BEST = accuracy
             torch.save(checkpoint, "classification.pt")
@@ -141,9 +156,9 @@ def objective(trial):
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize",
         pruner=optuna.pruners.PercentilePruner(
-            25.0, n_startup_trials=5, n_warmup_steps=15, interval_steps=5
+            33.0, n_startup_trials=5, n_warmup_steps=5, interval_steps=5
         ))
-    study.optimize(objective, n_trials=1)
+    study.optimize(objective, n_trials=10)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])

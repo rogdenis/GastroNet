@@ -45,20 +45,30 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 CLASSIFICATION_NET = "classification.pt"
 
 population = ["train", "valid"]
-weights = [0.8, 0.2]
-seed(0)
+weights = [0.9, 0.1]
+seed(1)
 seq = iter(choices(population, weights, k=10 ** 5))
 
 classes = [
-    'Antrum pyloricum',
-    'Corpus gastricum',
-    'Duodenum',
-    'Esophagus',
-    'Mouth',
-    'Oropharynx',
-    'Void']
+        "Mouth",
+        "Oropharynx",
+        "Esophagus",
+        "Corpus gastricum",
+        "Antrum pyloricum",
+        "Duodenum",
+        "Pathologie",
+        "Anus",
+        "Rectum",
+        "Sigmoid colon",
+        "Descending colon",
+        "Left colic flexure",
+        "Transverse colon",
+        "Right colic flexure",
+        "Ascending colon",
+        "Appendix",
+        "Void"]
 
-test = ClassificationDataset('dataset20230117', 'navigation.csv', classes, seq, "valid")
+test = ClassificationDataset('dataset20231002', 'navigation.csv', classes, seq, "valid")
 
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False)
 
@@ -88,24 +98,24 @@ for images, labels in test_dataloader:
     with torch.no_grad():
         outputs = model(images.to(device))
     _, predictions = torch.max(outputs, 1)
-    img_name = "frame" + str(i)
-    retval, buffer = cv2.imencode('.jpg', frames[0])
-    jpg_as_text = base64.b64encode(buffer)
-    segmentation_url = "{}?api_key={}&name={}.jpg".format(
-        TYPES['CLASSIFICATION']["PREFIX"],
-        TYPES['CLASSIFICATION']["KEY"],
-        img_name)
-    r = session.post(segmentation_url, data=jpg_as_text, headers={
-        "Content-Type": "application/x-www-form-urlencoded"
-    })
-    r_predictions = r.json()['predictions']
-    roboflow_prediction = max(r_predictions, key=lambda k: r_predictions[k]['confidence'])
+    # img_name = "frame" + str(i)
+    # retval, buffer = cv2.imencode('.jpg', frames[0])
+    # jpg_as_text = base64.b64encode(buffer)
+    # segmentation_url = "{}?api_key={}&name={}.jpg".format(
+    #     TYPES['CLASSIFICATION']["PREFIX"],
+    #     TYPES['CLASSIFICATION']["KEY"],
+    #     img_name)
+    # r = session.post(segmentation_url, data=jpg_as_text, headers={
+    #     "Content-Type": "application/x-www-form-urlencoded"
+    # })
+    # r_predictions = r.json()['predictions']
+    # roboflow_prediction = max(r_predictions, key=lambda k: r_predictions[k]['confidence'])
     for label, prediction in zip(labels, predictions):
         if prediction == label:
             correct_pred[classes[label]] += 1
             correct += 1
-        if roboflow_prediction == classes[label]:
-            roboflow += 1
+        # if roboflow_prediction == classes[label]:
+        #     roboflow += 1
         total += 1
         total_pred[classes[prediction]] += 1
         total_label[classes[label]] += 1
@@ -114,14 +124,14 @@ for images, labels in test_dataloader:
         image = cv2.putText(frames[0].copy(), text, (30,30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, COLOR, 2)
         cv2.imwrite("test_classification/image{}.jpg".format(i), image)
-        print("image", i, classes[label], text, prediction == label, roboflow_prediction, roboflow_prediction == classes[label])
+        #print("image", i, classes[label], text, prediction == label)#, roboflow_prediction, roboflow_prediction == classes[label])
     i += 1
 
 accuracy = 100 * correct / total
 print(f'My accuracy: {accuracy} %')
 
-roboflow_accuracy = 100 * roboflow / total
-print(f'Roboflow accuracy: {roboflow_accuracy} %')
+# roboflow_accuracy = 100 * roboflow / total
+# print(f'Roboflow accuracy: {roboflow_accuracy} %')
 
 for classname, correct_count in correct_pred.items():
     precision = 100 * float(correct_count) / total_pred[classname] if total_pred[classname] > 0 else 0

@@ -28,6 +28,8 @@ from torch.utils.data import DataLoader
 from pycocotools.coco import COCO
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from pprint import pprint
+from random import choices
+from random import seed
 from torch.utils.tensorboard import SummaryWriter
 from utils import filter_by_threshold, filter_nms, calculate_metrics, convert_to_array, SegmentationDataset, collate_fn
 from mean_average_precision import MetricBuilder
@@ -36,22 +38,43 @@ DATE = datetime.datetime.now().strftime("%Y%m%d%H%M")
 print(DATE)
 BEST = -1
 
+population = ["train", "valid"]
+weights = [0.8, 0.2]
+seed(0)
+seq = iter(choices(population, weights, k=10 ** 5))
+
 image_transform = A.Compose([
     A.MotionBlur(p=0.5),
     A.Defocus(p=0.5)
 ])
 
 coords_transform = A.Compose([
+    A.LongestMaxSize(max_size=800),
     A.Affine(shear=(-5, 5), p=0.5),
     A.Flip(p=0.5)
 ])
-train = SegmentationDataset('dataset', 'annotations_coco.json',
+
+image_resize = A.Compose([
+    A.LongestMaxSize(max_size=800)
+])
+
+train = SegmentationDataset('dataset20231002', 'annotations_coco.json',
     image_transform=image_transform,
     coords_transform=coords_transform,
     empty_rate=100,
+    seq=seq,
+    dtype="train",
     bg=True)
-valid = SegmentationDataset('dataset', 'annotations_coco.json', cats=train.cats, bg=True)
+
+valid = SegmentationDataset('dataset20231002', 'annotations_coco.json',
+    cats=train.cats,
+    bg=True,
+    seq=seq,
+    dtype="valid",
+    coords_transform=image_resize)
+
 print("train len", train.__len__())
+print("valid len", valid.__len__())
 print("train cats", train.cats)
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -61,8 +84,8 @@ def objective(trial):
     val_batch = 1
     #tb4_vb1_lr0.00014_wd0.00055_er100
     train_batch = trial.suggest_int("batch", 4, 4, log=False)
-    LR = trial.suggest_float("lr", 0.00014, 0.00014, log=True)#0.0001
-    WD = trial.suggest_float("WD", 0.00055, 0.00055, log=False)#0.001
+    LR = trial.suggest_float("lr", 0.00007, 0.00007, log=True)#0.0001
+    WD = trial.suggest_float("WD", 0.00096, 0.00096, log=False)#0.001
     ER = 100
 
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=False)  # load an instance segmentation model pre-trained pre-trained on COCO
@@ -99,7 +122,7 @@ def objective(trial):
         start_epoch = checkpoint['epoch'] + 1
         BEST = checkpoint['metric']
 
-    for epoch in range(start_epoch, 100):
+    for epoch in range(start_epoch, 60):
         model.train()
         i = 0
         for images, targets in train_dataloader:
@@ -152,6 +175,7 @@ def objective(trial):
                 'metric': mAP,
                 'params': pth
                 }
+        print(epoch, mAP)
         #torch.save(checkpoint, "last_{}.pt".format(pth).replace("/",""))
 
         if mAP > BEST:
@@ -168,8 +192,8 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize",
-        pruner=optuna.pruners.ThresholdPruner(
-            lower=1e-3, n_warmup_steps=5, interval_steps=5
+        pruner=optuna.pruners.PercentilePruner(
+            33.0, n_startup_trials=5, n_warmup_steps=5, interval_steps=5
         ))
     study.optimize(objective, n_trials=1)
 

@@ -4,15 +4,35 @@ import shutil
 import sys
 import cv2
 import os
+import numpy as np
 from PIL import Image
 from collections import Counter
 from imagehash import colorhash
 #from random import random
 from requests.auth import HTTPBasicAuth
 
-DATASETDIR = "dataset20230924"
+DATASETDIR = "dataset20231002"
 if not os.path.isdir(DATASETDIR):
     os.makedirs(DATASETDIR)
+
+TASKS = ["639dd94668ba2c0058cfb79c",
+"639dd94668ba2c0058cfb7a3",
+"639dd94668ba2c0058cfb7a2",
+"639dd94668ba2c0058cfb79e",
+"639dd94668ba2c0058cfb7a0",
+"639dd94668ba2c0058cfb79d",
+"639dd94668ba2c0058cfb7a4",
+"639dd94668ba2c0058cfb79f",
+"63d7c9103dd0305f59c1d966",
+"63d7c9103dd0305f59c1d970",
+"63d7c9103dd0305f59c1d96e",
+"63d7c9103dd0305f59c1d96c",
+"63d7c9103dd0305f59c1d96d",
+"63d7c9103dd0305f59c1d96b",
+"63d7c9103dd0305f59c1d96f",
+"63d7c9103dd0305f59c1d967",
+"63d7c9103dd0305f59c1d968",
+"64b83136f25ef0055d99662d"]
 
 PATHOLOGIES = [
     "Kartsenoma cords",
@@ -34,13 +54,43 @@ PATHOLOGIES = [
 ]
 
 PARTS = {
-    "Antrum pyloricum": 122/329,
+    "Mouth": 0,
+    "Oropharynx": 0,
+    "Esophagus": 0.5,
     "Corpus gastricum": 1,
-    "Duodenum": 30/329,
-    "Esophagus": 106/329,
-    "Mouth": 12/329,
-    "Oropharynx": 32/329,
-    "Void": 49/329
+    "Antrum pyloricum": 0,
+    "Duodenum": 0,
+    "Pathologie": 0,
+    "Anus": 0,
+    "Rectum": 0,
+    "Sigmoid colon": 0,
+    "Descending colon": 0,
+    "Left colic flexure": 0,
+    "Transverse colon": 0,
+    "Right colic flexure": 0,
+    "Ascending colon": 0,
+    "Appendix": 0,
+    "Void": 0
+}
+
+STAT = {
+    "Mouth": 0,
+    "Oropharynx": 0,
+    "Esophagus": 0,
+    "Corpus gastricum": 0,
+    "Antrum pyloricum": 0,
+    "Duodenum": 0,
+    "Pathologie": 0,
+    "Anus": 0,
+    "Rectum": 0,
+    "Sigmoid colon": 0,
+    "Descending colon": 0,
+    "Left colic flexure": 0,
+    "Transverse colon": 0,
+    "Right colic flexure": 0,
+    "Ascending colon": 0,
+    "Appendix": 0,
+    "Void": 0
 }
 
 hash_stat = set()
@@ -53,15 +103,20 @@ def download_file(url, local_filename):
 
 
 def extract_frame(vidcap, start, end, label, task_id, freq = 10):
+    STAT[label] += end - start
     last_hash = None
     success, image = vidcap.read()
     img_hash = colorhash(Image.fromarray(image), binbits=7)
     count = start
     images_to_labels = []
-    prob = freq * PARTS[label]
     #print(label, prob)
     while success and count < end:
-        if last_hash is None or (img_hash - last_hash > prob * 5 and img_hash not in hash_stat):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+        _, encimg = cv2.imencode('.jpg', gray, encode_param)
+        compression_rate = sys.getsizeof(encimg) / sys.getsizeof(gray)
+        if (last_hash is None or (img_hash - last_hash > freq * PARTS[label] and img_hash not in hash_stat))\
+            and compression_rate > 0.05:
             filename = "{}_{}.png".format(task_id, count)
             path = os.path.join(DATASETDIR, filename)
             cv2.imwrite(path, image)
@@ -102,94 +157,113 @@ def create_coco(pathologies):
 # auth = HTTPBasicAuth('test_a02653c3326a4da9bfabb3fadd61873b', '') # No password
 # response = requests.request("GET", url, headers=headers, auth=auth)
 #download batch_file
-URLS = ['https://storage.yandexcloud.net/cvproject/labeled_data/next_ten_x8mio8.json',
-        'https://storage.yandexcloud.net/cvproject/labeled_data/first10_35gvxn.json',
-        'https://storage.yandexcloud.net/cvproject/labeled_data/colono2.json']
-data = []
-
-for url in URLS:
-    print(url)
-    r = requests.get(url)
-    data += r.json()
+URLS = ['https://storage.yandexcloud.net/cvproject/labeled_data/next_ten_x8mio8__.json',
+        'https://storage.yandexcloud.net/cvproject/labeled_data/first10_35gvxn__.json',
+        'https://storage.yandexcloud.net/cvproject/labeled_data/colono2__.json']
+if os.path.isfile(os.path.join(DATASETDIR,'data.json')):
+    with open(os.path.join(DATASETDIR,'data.json')) as f:
+        data = json.load(f)
+else:
+    data = []
+    for url in URLS:
+        print(url)
+        r = requests.get(url)
+        data += r.json()
 
 COCO = create_coco(PATHOLOGIES)
 NAVIGATION = []
 annotation_id = 0
 images_with_annotations = 0
 for video in data:
-    task_id = video["task_id"]
-    if video.get('completed_at') is None:
-        continue
-    #download video
-    if 'originalUrl' in video['metadata']:
-         video_url = video['metadata']['originalUrl']
-         videofilename = video_url.split('/')[-1]
-    else:
-        video_url = video['attachmentS3Downloads'][-1]['s3URL']
-        videofilename = video['metadata']['filename']
-    meta = video["metadata"]["video"]
-    width = video["metadata"]["video"]["resolution"]["w"]
-    height = video["metadata"]["video"]["resolution"]["h"]
-    #r = requests.get(video_url)
-    print(videofilename)
-    if not os.path.isfile(videofilename):
-        print("download video")
-        #download_file(video_url, videofilename)
-    else:
-        print("video downloaded, skip")
-    response = video["response"]
-    #navigation
-    r = requests.get(response['events']['url'])
-    events = r.json()
-    start = 0
-    label = "Void"
-    label_ranged = False
-    vidcap = cv2.VideoCapture(videofilename)
-    for event in events:
-        if event["label"] == "Pathologie":
+    try:
+        task_id = video["task_id"]
+        if task_id not in TASKS:
             continue
-        #print(event)
-        if not label_ranged:
-            #print("{} from {} until {}".format(label, start, event["start"]))
-            start, end = start, event["start"]
-            start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
-            NAVIGATION += images_to_labels
-        label = event["label"]
-        if event["type"] == "range":
-            #print("{} from {} until {}".format(label, event["start"], event["end"]))
-            start, end = event["start"], event["end"]
-            start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
-            label_ranged = True
+        if video.get('completed_at') is None:
+            continue
+        #download video
+        if 'originalUrl' in video['metadata']:
+            video_url = video['metadata']['originalUrl']
+            videofilename = video_url.split('/')[-1]
         else:
-            label_ranged = False
-        NAVIGATION += images_to_labels
-    
-    #segmentation
-    r = requests.get(response['annotations']['url'])
-    annotations = r.json()
-    frames = {}
-    vidcap = cv2.VideoCapture(videofilename)
-    for key, annotation in annotations.items():
-        imagefilename = "{}_{}.png".format(task_id, annotation["frames"][0]["key"])
-        if imagefilename not in frames:
-            frames[imagefilename] = {
-                "image_id":  images_with_annotations,
-                "frame": annotation["frames"][0]["key"]
-            }
-            images_with_annotations += 1
-        obj = {}
-        obj["id"] = annotation_id
-        obj["image_id"] = frames[imagefilename]["image_id"]
-        obj["category_id"] = PATHOLOGIES.index(annotation["label"]) + 1
-        obj["segmentation"] = [[]]
-        for vertice in annotation["frames"][0]["vertices"]:
-            obj["segmentation"][0] += [vertice["x"],vertice["y"]]
-        COCO["annotations"].append(obj)
-        annotation_id += 1
-    COCO["images"] += extract_frames(vidcap, frames, DATASETDIR, width, height)
-    break
+            video_url = video['attachmentS3Downloads'][-1]['s3URL']
+            videofilename = video['metadata']['filename']
+        meta = video["metadata"]["video"]
+        width = video["metadata"]["video"]["resolution"]["w"]
+        height = video["metadata"]["video"]["resolution"]["h"]
+        #r = requests.get(video_url)
+        print(videofilename)
+        if not os.path.isfile(videofilename):
+            print("download video")
+            download_file(video_url, videofilename)
+        else:
+            print("video downloaded, skip")
+        response = video["response"]
+        #navigation
+        if 'data' not in response['events']:
+            r = requests.get(response['events']['url'])
+            events = r.json()
+            response['events']['data'] = events
+        else:
+            events = response['events']['data']
+        start = 0
+        label = "Void"
+        label_ranged = False
+        vidcap = cv2.VideoCapture(videofilename)
+        for event in events:
+            if event["label"] == "Pathologie":
+                continue
+            #print(event)
+            if not label_ranged:
+                #print("{} from {} until {}".format(label, start, event["start"]))
+                start, end = start, event["start"]
+                start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
+                NAVIGATION += images_to_labels
+            label = event["label"]
+            if event["type"] == "range":
+                #print("{} from {} until {}".format(label, event["start"], event["end"]))
+                start, end = event["start"], event["end"]
+                start, images_to_labels = extract_frame(vidcap, start, end, label, task_id)
+                label_ranged = True
+            else:
+                label_ranged = False
+            NAVIGATION += images_to_labels
+        
+        #segmentation
+        if 'data' not in response['annotations']:
+            r = requests.get(response['annotations']['url'])
+            annotations = r.json()
+            response['annotations']['data'] = annotations
+        else:
+            annotations = response['annotations']['data']
+        frames = {}
+        vidcap = cv2.VideoCapture(videofilename)
+        for key, annotation in annotations.items():
+            imagefilename = "{}_{}.png".format(task_id, annotation["frames"][0]["key"])
+            if imagefilename not in frames:
+                frames[imagefilename] = {
+                    "image_id":  images_with_annotations,
+                    "frame": annotation["frames"][0]["key"]
+                }
+                images_with_annotations += 1
+            obj = {}
+            obj["id"] = annotation_id
+            obj["image_id"] = frames[imagefilename]["image_id"]
+            obj["category_id"] = PATHOLOGIES.index(annotation["label"]) + 1
+            obj["segmentation"] = [[]]
+            for vertice in annotation["frames"][0]["vertices"]:
+                obj["segmentation"][0] += [vertice["x"],vertice["y"]]
+            COCO["annotations"].append(obj)
+            annotation_id += 1
+        COCO["images"] += extract_frames(vidcap, frames, DATASETDIR, width, height)
+    except Exception as e:
+        raise
+print(json.dumps(STAT,indent = 4))
+
 
 with open(os.path.join(DATASETDIR,"annotations_coco.json"),"w") as f:
     f.write(json.dumps(COCO, indent = 4))
 with open(os.path.join(DATASETDIR,"navigation.csv"),"w") as f:
     f.write('\n'.join(NAVIGATION))
+with open(os.path.join(DATASETDIR,"data.json"), "w") as f:
+    f.write(json.dumps(data,indent=4))

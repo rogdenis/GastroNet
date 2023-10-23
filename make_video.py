@@ -37,13 +37,23 @@ segmentation_model.to(device)# move model to the right devic
 segmentation_model.eval()
 
 classes = [
-    'Antrum pyloricum',
-    'Corpus gastricum',
-    'Duodenum',
-    'Esophagus',
-    'Mouth',
-    'Oropharynx',
-    'Void']
+        "Mouth",
+        "Oropharynx",
+        "Esophagus",
+        "Corpus gastricum",
+        "Antrum pyloricum",
+        "Duodenum",
+        "Pathologie",
+        "Anus",
+        "Rectum",
+        "Sigmoid colon",
+        "Descending colon",
+        "Left colic flexure",
+        "Transverse colon",
+        "Right colic flexure",
+        "Ascending colon",
+        "Appendix",
+        "Void"]
 
 #LOAD CLASSIFICATION MODEL
 PATH = "classification.pt"
@@ -86,7 +96,8 @@ def getFrames(segmentation_model, classification_model):
     orig_frame = frame.copy()
     height,width,layers = frame.shape
     fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-    video_out=cv2.VideoWriter('detections_' + VIDEO_NAME, fourcc, 20.0, (2 * width,height))
+    out_file = VIDEO_NAME.split('/')[-1]
+    video_out=cv2.VideoWriter('detections_' + out_file, fourcc, 20.0, (2 * width,height))
     scores = []
     switches = 0
     pred = None
@@ -101,7 +112,6 @@ def getFrames(segmentation_model, classification_model):
             classification = classification_model(image)
             #classification = softmax(classification_model(image)[0][:len(classes)])
             classification = classification_model(image)[0][:len(classes)]
-            print(classification)
         predict = draw_segmentation_map(frame, detections[0], COLORS, coco_names)
         predict = drawClassification(predict, classification)
         result = np.hstack([orig_frame,predict])
