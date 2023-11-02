@@ -34,13 +34,14 @@ from torch.utils.tensorboard import SummaryWriter
 from utils import filter_by_threshold, filter_nms, calculate_metrics, convert_to_array, SegmentationDataset, collate_fn
 from mean_average_precision import MetricBuilder
 
+DATASET = 'dataset20231029'
 DATE = datetime.datetime.now().strftime("%Y%m%d%H%M")
 print(DATE)
 BEST = -1
 
 population = ["train", "valid"]
 weights = [0.8, 0.2]
-seed(0)
+seed(1)
 seq = iter(choices(population, weights, k=10 ** 5))
 
 image_transform = A.Compose([
@@ -58,7 +59,7 @@ image_resize = A.Compose([
     A.LongestMaxSize(max_size=800)
 ])
 
-train = SegmentationDataset('dataset20231002', 'annotations_coco.json',
+train = SegmentationDataset(DATASET, 'annotations_coco.json',
     image_transform=image_transform,
     coords_transform=coords_transform,
     empty_rate=100,
@@ -66,7 +67,7 @@ train = SegmentationDataset('dataset20231002', 'annotations_coco.json',
     dtype="train",
     bg=True)
 
-valid = SegmentationDataset('dataset20231002', 'annotations_coco.json',
+valid = SegmentationDataset(DATASET, 'annotations_coco.json',
     cats=train.cats,
     bg=True,
     seq=seq,

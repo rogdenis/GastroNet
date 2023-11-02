@@ -14,10 +14,12 @@ from utils import ClassificationDataset, collate_fn
 from torchvision.models import resnet50
 from torch.utils.tensorboard import SummaryWriter
 
+DATASET = 'dataset20231029'
+
 population = ["train", "valid"]
 weights = [0.8, 0.2]
 seed(0)
-seq = iter(choices(population, weights, k=10 ** 5))
+seq = iter(choices(population, weights, k=10 ** 6))
 
 classes = [
         "Mouth",
@@ -53,13 +55,13 @@ image_resize = A.Compose([
     A.LongestMaxSize(max_size=800)
 ])
 
-trainset = ClassificationDataset('dataset20231002', 'navigation.csv', classes,
+trainset = ClassificationDataset(DATASET, 'navigation.csv', classes,
     seq, "train",
     image_transform=image_transform,
     coords_transform=coords_transform,
 )
 
-valid = ClassificationDataset('dataset20231002', 'navigation.csv', classes,
+valid = ClassificationDataset(DATASET, 'navigation.csv', classes,
     seq, "valid",
     image_transform=None,
     coords_transform=image_resize,
@@ -78,7 +80,7 @@ def objective(trial):
     train_batch = trial.suggest_int("batch", 20, 20, log=False)
     LR = trial.suggest_float("lr", 1e-05, 1e-04, log=True)#0.0001
     WD = trial.suggest_float("WD", 1e-05, 2e-04, log=False)#0.001
-    pth = 'classification_20231004/{}_{}_{}'.format(train_batch, LR, WD)
+    pth = 'classification_20231030/{}_{}_{}'.format(train_batch, LR, WD)
     print(pth)
     writer = SummaryWriter(pth)
 

@@ -68,7 +68,7 @@ classes = [
         "Appendix",
         "Void"]
 
-test = ClassificationDataset('dataset20231002', 'navigation.csv', classes, seq, "valid")
+test = ClassificationDataset('dataset20231029', 'navigation.csv', classes, seq, "valid")
 
 test_dataloader = DataLoader(test, batch_size=1, shuffle=False)
 

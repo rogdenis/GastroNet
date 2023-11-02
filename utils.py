@@ -23,7 +23,7 @@ def get_colors(coco_dir, annotation_file):
 
 class ClassificationDataset(Dataset):
     def __init__(self, img_dir, annotations_file, classes,
-                seq, type,
+                seq, dataset_type,
                 image_transform=None, coords_transform=None, SEED = "0"):
         self.NAVIGATION_CLASSES = classes
         self.img_dir = img_dir
@@ -32,15 +32,11 @@ class ClassificationDataset(Dataset):
         self.indx = []
         with open(os.path.join(img_dir, annotations_file)) as f:
             for line in f:
-                if next(seq) != type:
+                if next(seq) != dataset_type:
                     continue
                 tabs = line.strip().split(',')
                 fname = tabs[0]
-                try:
-                    cl = self.NAVIGATION_CLASSES.index(tabs[1])
-                except:
-                    print(tabs)
-                    raise
+                cl = self.NAVIGATION_CLASSES.index(tabs[1])
                 # blur = cv2.Laplacian(cv2.imread(os.path.join(img_dir, fname)), cv2.CV_64F).var()
                 # variance = np.var(cv2.imread(os.path.join(img_dir, fname)))
                 # if blur > 100 or variance > 2500:

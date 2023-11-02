@@ -26,6 +26,7 @@ from pprint import pprint
 torch.manual_seed(0)
 TH = 0
 
+DATASET = "dataset20231029"
 population = ["train", "valid"]
 weights = [0.8, 0.2]
 seed(0)
@@ -45,8 +46,8 @@ image_resize = A.Compose([
     A.LongestMaxSize(max_size=800)
 ])
 
-train = SegmentationDataset('dataset20231002', 'annotations_coco.json')
-test = SegmentationDataset('dataset20231002', 'annotations_coco.json',
+train = SegmentationDataset(DATASET, 'annotations_coco.json')
+test = SegmentationDataset(DATASET, 'annotations_coco.json',
     cats=train.cats,
     coords_transform=image_resize,
     seq=seq,
@@ -74,7 +75,7 @@ writer = SummaryWriter(checkpoint['params'])
 
 i = 0
 GL = {str(th/100): {"TP":0, "FP":0, "FN":0} for th in range(0,100,5)}
-COLORS, coco_names = get_colors('dataset', 'annotations_coco.json')
+COLORS, coco_names = get_colors(DATASET, 'annotations_coco.json')
 for images, targets in test_dataloader:
     #metric = MeanAveragePrecision(class_metrics=True, iou_thresholds = [0.9], rec_thresholds=[0.001])
     frames = tuple(cv2.cvtColor(image.numpy().astype(np.uint8).swapaxes(0, 2).swapaxes(0, 1), cv2.COLOR_BGR2RGB) for image in images)#.swapaxes(0, 2).swapaxes(1, 0) for image in images)
