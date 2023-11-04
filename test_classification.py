@@ -22,6 +22,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import ClassificationDataset, collate_fn
+from utils import filter_events_by_research_type
 from torchmetrics import PrecisionRecallCurve
 from torch.utils.tensorboard import SummaryWriter
 from pprint import pprint

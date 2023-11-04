@@ -19,6 +19,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from utils import filter_by_threshold, draw_segmentation_map, filter_nms, calculate_metrics, convert_to_array, get_colors
+from utils import filter_pathologies_by_research_type
 from utils import SegmentationDataset, collate_fn
 from torchmetrics import PrecisionRecallCurve
 from torch.utils.tensorboard import SummaryWriter

@@ -4,6 +4,7 @@ import random
 import torch
 import os
 import random
+import json
 import torchvision.ops
 from time import time
 from torchvision import transforms
@@ -179,6 +180,33 @@ def filter_by_threshold(outputs, threshold):
         out['masks'] = masks[thresholded_preds_indices]
         out['boxes'] = output['boxes'][thresholded_preds_indices]
         out['labels'] = output['labels'][thresholded_preds_indices]
+        outs.append(out)
+    return outs
+
+
+def filter_events_by_research_type(outputs, classes, videotype):
+    cl = outputs.detach().cpu().numpy()
+    with open('restrictions.json') as f:
+        restrictions = json.load(f)
+        impossible_events_index = [classes.index(c) for c in classes if c not in restrictions[videotype]['events']]
+    outputs[impossible_events_index] = -1000.0
+    return outputs
+
+
+def filter_pathologies_by_research_type(outputs, coco_names, videotype):
+    outs = []
+    with open('restrictions.json') as f:
+        restrictions = json.load(f)
+        possible_detections = restrictions[videotype]['detections']
+    for output in outputs:
+        out = {}
+        labels = list(output['labels'].detach().cpu().numpy())
+        selected_detections = [labels.index(l) for l in labels if coco_names[l] in possible_detections]
+        out['scores'] = output['scores'][selected_detections]
+        masks = output['masks']>0.6
+        out['masks'] = masks[selected_detections]
+        out['boxes'] = output['boxes'][selected_detections]
+        out['labels'] = output['labels'][selected_detections]
         outs.append(out)
     return outs
 
